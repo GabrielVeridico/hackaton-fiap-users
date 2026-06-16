@@ -1,4 +1,4 @@
-﻿using Xunit;
+using Xunit;
 using HackatonFiap.Users.Application.Commands.UpdateProfile;
 using HackatonFiap.Users.Application.Errors;
 using HackatonFiap.Users.Application.Interfaces;
@@ -6,27 +6,27 @@ using HackatonFiap.Users.Domain.Entities;
 using HackatonFiap.Users.Domain.Events;
 using HackatonFiap.Users.Domain.ValueObjects;
 using FluentAssertions;
-using Moq;
+using NSubstitute;
 
 namespace HackatonFiap.Users.UnitTests.Commands;
 
 public class UpdateProfileCommandHandlerTests
 {
-    private readonly Mock<IUserRepository> _userRepository = new();
-    private readonly Mock<IPasswordHasher> _passwordHasher = new();
-    private readonly Mock<IAuditService> _auditService = new();
-    private readonly Mock<IEventPublisher> _eventPublisher = new();
+    private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
+    private readonly IPasswordHasher _passwordHasher = Substitute.For<IPasswordHasher>();
+    private readonly IAuditService _auditService = Substitute.For<IAuditService>();
+    private readonly IEventPublisher _eventPublisher = Substitute.For<IEventPublisher>();
     private readonly UpdateProfileCommandHandler _handler;
 
     public UpdateProfileCommandHandlerTests()
     {
         _handler = new UpdateProfileCommandHandler(
-            _userRepository.Object,
-            _passwordHasher.Object,
-            _auditService.Object,
-            _eventPublisher.Object);
+            _userRepository,
+            _passwordHasher,
+            _auditService,
+            _eventPublisher);
 
-        _passwordHasher.Setup(x => x.Hash(It.IsAny<string>())).Returns("new_hashed_password");
+        _passwordHasher.Hash(Arg.Any<string>()).Returns("new_hashed_password");
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public class UpdateProfileCommandHandlerTests
     {
         var user = User.Create("Old Name", "test@example.com", new Password("hashed"));
         var command = new UpdateProfileCommand(user.Id, "New Name", null, "corr-id");
-        _userRepository.Setup(x => x.FindByIdAsync(user.Id)).ReturnsAsync(user);
+        _userRepository.FindByIdAsync(user.Id).Returns(user);
 
         var result = await _handler.HandleAsync(command);
 
@@ -47,19 +47,19 @@ public class UpdateProfileCommandHandlerTests
     {
         var user = User.Create("Test User", "test@example.com", new Password("old_hashed"));
         var command = new UpdateProfileCommand(user.Id, null, "NewValidPass123!", "corr-id");
-        _userRepository.Setup(x => x.FindByIdAsync(user.Id)).ReturnsAsync(user);
+        _userRepository.FindByIdAsync(user.Id).Returns(user);
 
         var result = await _handler.HandleAsync(command);
 
         result.IsSuccess.Should().BeTrue();
-        _passwordHasher.Verify(x => x.Hash("NewValidPass123!"), Times.Once);
+        _passwordHasher.Received(1).Hash("NewValidPass123!");
     }
 
     [Fact]
     public async Task HandleAsync_NonExistentUser_ShouldReturnNotFound()
     {
         var command = new UpdateProfileCommand(Guid.NewGuid(), "Name", null, "corr-id");
-        _userRepository.Setup(x => x.FindByIdAsync(command.UserId)).ReturnsAsync((User?)null);
+        _userRepository.FindByIdAsync(command.UserId).Returns((User?)null);
 
         var result = await _handler.HandleAsync(command);
 
@@ -72,14 +72,14 @@ public class UpdateProfileCommandHandlerTests
     {
         var user = User.Create("Old Name", "test@example.com", new Password("hashed"));
         var command = new UpdateProfileCommand(user.Id, "New Name", null, "corr-id");
-        _userRepository.Setup(x => x.FindByIdAsync(user.Id)).ReturnsAsync(user);
+        _userRepository.FindByIdAsync(user.Id).Returns(user);
 
         await _handler.HandleAsync(command);
 
-        _auditService.Verify(x => x.AuditAsync(
+        await _auditService.Received(1).AuditAsync(
             "User", user.Id, "UserProfileUpdated",
-            It.IsAny<object>(), It.IsAny<object>(),
-            command.CorrelationId, user.Id.ToString()), Times.Once);
+            Arg.Any<object>(), Arg.Any<object>(),
+            command.CorrelationId, user.Id.ToString());
     }
 
     [Fact]
@@ -87,11 +87,11 @@ public class UpdateProfileCommandHandlerTests
     {
         var user = User.Create("Old Name", "test@example.com", new Password("hashed"));
         var command = new UpdateProfileCommand(user.Id, "New Name", null, "corr-id");
-        _userRepository.Setup(x => x.FindByIdAsync(user.Id)).ReturnsAsync(user);
+        _userRepository.FindByIdAsync(user.Id).Returns(user);
 
         await _handler.HandleAsync(command);
 
-        _eventPublisher.Verify(x => x.PublishAsync(
-            "user-profile-updated", It.IsAny<UserProfileUpdated>(), command.CorrelationId), Times.Once);
+        await _eventPublisher.Received(1).PublishAsync(
+            "user-profile-updated", Arg.Any<UserProfileUpdated>(), command.CorrelationId);
     }
 }

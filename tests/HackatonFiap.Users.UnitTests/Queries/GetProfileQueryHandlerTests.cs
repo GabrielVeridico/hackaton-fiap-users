@@ -1,29 +1,29 @@
-﻿using Xunit;
+using Xunit;
 using HackatonFiap.Users.Application.Errors;
 using HackatonFiap.Users.Application.Interfaces;
 using HackatonFiap.Users.Application.Queries.GetProfile;
 using HackatonFiap.Users.Domain.Entities;
 using HackatonFiap.Users.Domain.ValueObjects;
 using FluentAssertions;
-using Moq;
+using NSubstitute;
 
 namespace HackatonFiap.Users.UnitTests.Queries;
 
 public class GetProfileQueryHandlerTests
 {
-    private readonly Mock<IUserRepository> _userRepository = new();
+    private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly GetProfileQueryHandler _handler;
 
     public GetProfileQueryHandlerTests()
     {
-        _handler = new GetProfileQueryHandler(_userRepository.Object);
+        _handler = new GetProfileQueryHandler(_userRepository);
     }
 
     [Fact]
     public async Task HandleAsync_WithValidId_ShouldReturnProfile()
     {
         var user = User.Create("Test User", "test@example.com", new Password("hashed"));
-        _userRepository.Setup(x => x.FindByIdAsync(user.Id)).ReturnsAsync(user);
+        _userRepository.FindByIdAsync(user.Id).Returns(user);
 
         var result = await _handler.HandleAsync(new GetProfileQuery(user.Id));
 
@@ -36,7 +36,7 @@ public class GetProfileQueryHandlerTests
     public async Task HandleAsync_WithInvalidId_ShouldReturnNotFound()
     {
         var id = Guid.NewGuid();
-        _userRepository.Setup(x => x.FindByIdAsync(id)).ReturnsAsync((User?)null);
+        _userRepository.FindByIdAsync(id).Returns((User?)null);
 
         var result = await _handler.HandleAsync(new GetProfileQuery(id));
 
@@ -48,7 +48,7 @@ public class GetProfileQueryHandlerTests
     public async Task HandleAsync_ShouldReturnCorrectFields()
     {
         var user = User.Create("Full Name", "full@example.com", new Password("hashed"));
-        _userRepository.Setup(x => x.FindByIdAsync(user.Id)).ReturnsAsync(user);
+        _userRepository.FindByIdAsync(user.Id).Returns(user);
 
         var result = await _handler.HandleAsync(new GetProfileQuery(user.Id));
 
