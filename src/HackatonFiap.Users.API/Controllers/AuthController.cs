@@ -1,7 +1,9 @@
 ﻿using HackatonFiap.Users.API.Middlewares;
 using HackatonFiap.Users.Application.Commands.AuthenticateUser;
+using HackatonFiap.Users.Application.Commands.Logout;
 using HackatonFiap.Users.Application.Commands.RefreshTokenFlow;
 using HackatonFiap.Users.Application.Commands.RegisterDonor;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HackatonFiap.Users.API.Controllers;
@@ -13,17 +15,20 @@ public class AuthController : ControllerBase
     private readonly AuthenticateUserCommandHandler _authenticateHandler;
     private readonly RegisterDonorCommandHandler _registerDonorHandler;
     private readonly RefreshTokenCommandHandler _refreshHandler;
+    private readonly LogoutCommandHandler _logoutHandler;
     private readonly ICorrelationContext _correlation;
 
     public AuthController(
         AuthenticateUserCommandHandler authenticateHandler,
         RegisterDonorCommandHandler registerDonorHandler,
         RefreshTokenCommandHandler refreshHandler,
+        LogoutCommandHandler logoutHandler,
         ICorrelationContext correlation)
     {
         _authenticateHandler = authenticateHandler;
         _registerDonorHandler = registerDonorHandler;
         _refreshHandler = refreshHandler;
+        _logoutHandler = logoutHandler;
         _correlation = correlation;
     }
 
@@ -63,8 +68,17 @@ public class AuthController : ControllerBase
             return Unauthorized(new ProblemDetails { Title = result.Error.Description, Detail = result.Error.Code });
         return Ok(result.Value);
     }
+
+    [Authorize]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
+    {
+        await _logoutHandler.HandleAsync(new LogoutCommand(request.RefreshToken, _correlation.CorrelationId));
+        return NoContent();
+    }
 }
 
 public record LoginRequest(string Email, string Password);
 public record RegisterDonorRequest(HackatonFiap.Users.Domain.Enums.PersonType PersonType, string Document, string Name, string Email, string Password);
 public record RefreshRequest(string RefreshToken);
+public record LogoutRequest(string RefreshToken);
