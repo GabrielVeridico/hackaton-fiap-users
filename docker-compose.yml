@@ -1,0 +1,12 @@
+services:
+  fgc.users:
+    build:
+      context: .
+      dockerfile: src/FGC.Users.API/Dockerfile
+    ports:
+      - "5000:8080"
+    environment:
+      - ConnectionStrings__Default=Server=tcp:<your-server>.database.windows.net,1433;Initial Catalog=FGCUsersDb;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;Authentication=Active Directory Default;
+      - Jwt__Issuer=fgc.local
+      - Jwt__Audience=fgc.clients
+      - Jwt__Secret=super-secret-key-please-change
