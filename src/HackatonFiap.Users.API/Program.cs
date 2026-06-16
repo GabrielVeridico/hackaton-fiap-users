@@ -22,6 +22,9 @@ using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Sinks.ApplicationInsights.TelemetryConverters;
 
+// Keep custom claims (sub, isOwner) readable as-is on the API side — clear the inbound claim-type map once.
+System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
+
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .WriteTo.Console()
@@ -100,6 +103,8 @@ try
     builder.Services.AddScoped<IAuditService, AuditService>();
     builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
     builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
+    builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+    builder.Services.AddSingleton<IRefreshTokenService, RefreshTokenService>();
 
     // Event Publisher
     var serviceBusConn = configuration.GetValue<string>("ServiceBus:ConnectionString");

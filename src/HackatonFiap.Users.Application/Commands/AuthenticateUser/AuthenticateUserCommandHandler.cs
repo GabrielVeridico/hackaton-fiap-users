@@ -1,36 +1,38 @@
-﻿using HackatonFiap.Users.Application.DTOs;
+using HackatonFiap.Users.Application.DTOs;
 using HackatonFiap.Users.Application.Errors;
 using HackatonFiap.Users.Application.Interfaces;
 using HackatonFiap.Users.Domain.Abstractions;
+using HackatonFiap.Users.Domain.Entities;
 
 namespace HackatonFiap.Users.Application.Commands.AuthenticateUser;
 
 public class AuthenticateUserCommandHandler
 {
-    private readonly IUserRepository _userRepository;
-    private readonly IPasswordHasher _passwordHasher;
-    private readonly IJwtTokenGenerator _jwtTokenGenerator;
+    private readonly IUserRepository _users;
+    private readonly IPasswordHasher _hasher;
+    private readonly IJwtTokenGenerator _jwt;
+    private readonly IRefreshTokenRepository _refresh;
+    private readonly IRefreshTokenService _refreshSvc;
 
     public AuthenticateUserCommandHandler(
-        IUserRepository userRepository,
-        IPasswordHasher passwordHasher,
-        IJwtTokenGenerator jwtTokenGenerator)
+        IUserRepository users, IPasswordHasher hasher, IJwtTokenGenerator jwt,
+        IRefreshTokenRepository refresh, IRefreshTokenService refreshSvc)
     {
-        _userRepository = userRepository;
-        _passwordHasher = passwordHasher;
-        _jwtTokenGenerator = jwtTokenGenerator;
+        _users = users; _hasher = hasher; _jwt = jwt; _refresh = refresh; _refreshSvc = refreshSvc;
     }
 
-    public async Task<Result<LoginResponse>> HandleAsync(AuthenticateUserCommand command)
+    public async Task<Result<AuthResponse>> HandleAsync(AuthenticateUserCommand command)
     {
-        var user = await _userRepository.FindByEmailAsync(command.Email);
-        if (user is null)
-            return Result<LoginResponse>.Failure(UserErrors.InvalidCredentials);
+        var user = await _users.FindByEmailAsync(command.Email);
+        if (user is null || !_hasher.Verify(command.Password, user.Password.HashValue) || !user.IsActive)
+            return Result<AuthResponse>.Failure(UserErrors.InvalidCredentials);
 
-        if (!_passwordHasher.Verify(command.Password, user.Password.HashValue))
-            return Result<LoginResponse>.Failure(UserErrors.InvalidCredentials);
+        var access = _jwt.GenerateAccessToken(user);
+        var (raw, hash) = _refreshSvc.Generate();
+        var refreshToken = RefreshToken.Issue(user.Id, hash, DateTime.UtcNow.AddDays(_refreshSvc.RefreshTokenDays));
+        await _refresh.AddAsync(refreshToken);
 
-        var response = _jwtTokenGenerator.GenerateToken(user);
-        return Result<LoginResponse>.Success(response);
+        var expiresIn = (int)(access.ExpiresAtUtc - DateTime.UtcNow).TotalSeconds;
+        return Result<AuthResponse>.Success(new AuthResponse(access.Token, raw, expiresIn));
     }
 }

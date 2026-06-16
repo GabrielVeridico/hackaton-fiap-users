@@ -1,4 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using HackatonFiap.Users.Application.DTOs;
@@ -13,37 +13,31 @@ public class JwtTokenGenerator : IJwtTokenGenerator
 {
     private readonly IConfiguration _configuration;
 
-    public JwtTokenGenerator(IConfiguration configuration)
-    {
-        _configuration = configuration;
-    }
+    public JwtTokenGenerator(IConfiguration configuration) => _configuration = configuration;
 
-    public LoginResponse GenerateToken(User user)
+    public AccessToken GenerateAccessToken(User user)
     {
         var issuer = _configuration.GetValue<string>("Jwt:Issuer") ?? "conexaosolidaria.local";
         var audience = _configuration.GetValue<string>("Jwt:Audience") ?? "conexaosolidaria.clients";
         var secret = _configuration.GetValue<string>("Jwt:Key")
             ?? throw new InvalidOperationException("Jwt:Key must be configured via secret store/Key Vault/env — no insecure fallback.");
-        if (System.Text.Encoding.UTF8.GetByteCount(secret) < 32)
+        if (Encoding.UTF8.GetByteCount(secret) < 32)
             throw new InvalidOperationException("Jwt:Key must be at least 32 bytes of high-entropy data.");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
 
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(JwtRegisteredClaimNames.Name, user.Name),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim("role", user.Role.ToString())
+            new Claim(ClaimTypes.Role, user.Role.ToString()),
+            new Claim("isOwner", user.IsOwner ? "true" : "false")
         };
 
-        var expiry = DateTime.UtcNow.AddHours(1);
+        var expiry = DateTime.UtcNow.AddHours(4);
         var token = new JwtSecurityToken(
-            issuer: issuer,
-            audience: audience,
-            claims: claims,
-            expires: expiry,
+            issuer: issuer, audience: audience, claims: claims, expires: expiry,
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
 
-        return new LoginResponse(new JwtSecurityTokenHandler().WriteToken(token), expiry);
+        return new AccessToken(new JwtSecurityTokenHandler().WriteToken(token), expiry);
     }
 }

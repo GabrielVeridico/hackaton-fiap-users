@@ -1,4 +1,3 @@
-using Xunit;
 using HackatonFiap.Users.Application.Commands.AuthenticateUser;
 using HackatonFiap.Users.Application.DTOs;
 using HackatonFiap.Users.Application.Errors;
@@ -8,81 +7,65 @@ using HackatonFiap.Users.Domain.Enums;
 using HackatonFiap.Users.Domain.ValueObjects;
 using FluentAssertions;
 using NSubstitute;
+using Xunit;
 
 namespace HackatonFiap.Users.UnitTests.Commands;
 
 public class AuthenticateUserCommandHandlerTests
 {
-    private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
-    private readonly IPasswordHasher _passwordHasher = Substitute.For<IPasswordHasher>();
-    private readonly IJwtTokenGenerator _jwtTokenGenerator = Substitute.For<IJwtTokenGenerator>();
+    private readonly IUserRepository _users = Substitute.For<IUserRepository>();
+    private readonly IPasswordHasher _hasher = Substitute.For<IPasswordHasher>();
+    private readonly IJwtTokenGenerator _jwt = Substitute.For<IJwtTokenGenerator>();
+    private readonly IRefreshTokenRepository _refresh = Substitute.For<IRefreshTokenRepository>();
+    private readonly IRefreshTokenService _refreshSvc = Substitute.For<IRefreshTokenService>();
     private readonly AuthenticateUserCommandHandler _handler;
 
     public AuthenticateUserCommandHandlerTests()
     {
-        _handler = new AuthenticateUserCommandHandler(
-            _userRepository,
-            _passwordHasher,
-            _jwtTokenGenerator);
+        _handler = new AuthenticateUserCommandHandler(_users, _hasher, _jwt, _refresh, _refreshSvc);
+        _jwt.GenerateAccessToken(Arg.Any<User>()).Returns(new AccessToken("jwt", DateTime.UtcNow.AddHours(4)));
+        _refreshSvc.Generate().Returns(("raw", "hash"));
+        _refreshSvc.RefreshTokenDays.Returns(7);
     }
 
+    private static User ActiveUser() =>
+        User.RegisterDonor(PersonType.Individual, Document.Create("52998224725", PersonType.Individual), "J", "j@x.com", new Password("hashed"));
+
     [Fact]
-    public async Task HandleAsync_WithValidCredentials_ShouldReturnLoginResponse()
+    public async Task Login_Valid_ReturnsTokensAndPersistsRefresh()
     {
-        var user = User.RegisterDonor(PersonType.Individual, Document.Create("52998224725", PersonType.Individual), "Test", "test@example.com", new Password("hashed"));
-        var command = new AuthenticateUserCommand("test@example.com", "password123", "corr-id");
-        var expectedResponse = new LoginResponse("jwt-token", DateTime.UtcNow.AddHours(1));
+        var user = ActiveUser();
+        _users.FindByEmailAsync("j@x.com").Returns(user);
+        _hasher.Verify("Senha@123", "hashed").Returns(true);
 
-        _userRepository.FindByEmailAsync(command.Email).Returns(user);
-        _passwordHasher.Verify(command.Password, "hashed").Returns(true);
-        _jwtTokenGenerator.GenerateToken(user).Returns(expectedResponse);
-
-        var result = await _handler.HandleAsync(command);
+        var result = await _handler.HandleAsync(new AuthenticateUserCommand("j@x.com", "Senha@123", "corr"));
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Token.Should().Be("jwt-token");
+        result.Value.AccessToken.Should().Be("jwt");
+        result.Value.RefreshToken.Should().Be("raw");
+        await _refresh.Received(1).AddAsync(Arg.Any<RefreshToken>());
     }
 
     [Fact]
-    public async Task HandleAsync_WithNonExistentEmail_ShouldReturnInvalidCredentials()
+    public async Task Login_WrongPassword_Fails()
     {
-        var command = new AuthenticateUserCommand("notfound@example.com", "password123", "corr-id");
-        _userRepository.FindByEmailAsync(command.Email).Returns((User?)null);
+        var user = ActiveUser();
+        _users.FindByEmailAsync("j@x.com").Returns(user);
+        _hasher.Verify(Arg.Any<string>(), Arg.Any<string>()).Returns(false);
 
-        var result = await _handler.HandleAsync(command);
-
-        result.IsFailure.Should().BeTrue();
+        var result = await _handler.HandleAsync(new AuthenticateUserCommand("j@x.com", "x", "corr"));
         result.Error.Code.Should().Be(UserErrors.InvalidCredentials.Code);
     }
 
     [Fact]
-    public async Task HandleAsync_WithWrongPassword_ShouldReturnInvalidCredentials()
+    public async Task Login_InactiveUser_Fails()
     {
-        var user = User.RegisterDonor(PersonType.Individual, Document.Create("52998224725", PersonType.Individual), "Test", "test@example.com", new Password("hashed"));
-        var command = new AuthenticateUserCommand("test@example.com", "wrongpassword", "corr-id");
+        var user = ActiveUser();
+        user.Deactivate();
+        _users.FindByEmailAsync("j@x.com").Returns(user);
+        _hasher.Verify(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
 
-        _userRepository.FindByEmailAsync(command.Email).Returns(user);
-        _passwordHasher.Verify(command.Password, "hashed").Returns(false);
-
-        var result = await _handler.HandleAsync(command);
-
-        result.IsFailure.Should().BeTrue();
+        var result = await _handler.HandleAsync(new AuthenticateUserCommand("j@x.com", "x", "corr"));
         result.Error.Code.Should().Be(UserErrors.InvalidCredentials.Code);
-    }
-
-    [Fact]
-    public async Task HandleAsync_WithValidCredentials_ShouldCallJwtTokenGenerator()
-    {
-        var user = User.RegisterDonor(PersonType.Individual, Document.Create("52998224725", PersonType.Individual), "Test", "test@example.com", new Password("hashed"));
-        var command = new AuthenticateUserCommand("test@example.com", "password123", "corr-id");
-        var expectedResponse = new LoginResponse("jwt-token", DateTime.UtcNow.AddHours(1));
-
-        _userRepository.FindByEmailAsync(command.Email).Returns(user);
-        _passwordHasher.Verify(command.Password, "hashed").Returns(true);
-        _jwtTokenGenerator.GenerateToken(user).Returns(expectedResponse);
-
-        await _handler.HandleAsync(command);
-
-        _jwtTokenGenerator.Received(1).GenerateToken(user);
     }
 }

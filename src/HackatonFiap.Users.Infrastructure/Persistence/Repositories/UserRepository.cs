@@ -15,7 +15,7 @@ public class UserRepository : IUserRepository
 
     public async Task<User?> FindByEmailAsync(string email)
     {
-        return await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email);
+        return await _db.Users.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(u => u.Email == email);
     }
 
     public async Task<User?> FindByIdAsync(Guid id)
