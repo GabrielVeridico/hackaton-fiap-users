@@ -54,13 +54,13 @@ jobs:
 
       - name: Build Docker image
         run: |
-          IMAGE=${{ secrets.ACR_NAME }}.azurecr.io/fgc-users
+          IMAGE=${{ secrets.ACR_NAME }}.azurecr.io/hackatonfiap-users
           docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest -f src/HackatonFiap.Users.API/Dockerfile .
 
       - name: Security Scan (Trivy)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ secrets.ACR_NAME }}.azurecr.io/fgc-users:${{ github.sha }}
+          image-ref: ${{ secrets.ACR_NAME }}.azurecr.io/hackatonfiap-users:${{ github.sha }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
@@ -73,7 +73,7 @@ jobs:
 
       - name: Push Docker image
         run: |
-          IMAGE=${{ secrets.ACR_NAME }}.azurecr.io/fgc-users
+          IMAGE=${{ secrets.ACR_NAME }}.azurecr.io/hackatonfiap-users
           docker push $IMAGE:${{ github.sha }}
           docker push $IMAGE:latest
 
@@ -91,7 +91,7 @@ jobs:
 
       - name: Rolling Deploy
         run: |
-          kubectl set image deployment/fgc-users \
-            fgc-users=${{ secrets.ACR_NAME }}.azurecr.io/fgc-users:${{ github.sha }} \
-            -n fcg
-          kubectl rollout status deployment/fgc-users -n fcg --timeout=120s
+          kubectl set image deployment/hackatonfiap-users \
+            hackatonfiap-users=${{ secrets.ACR_NAME }}.azurecr.io/hackatonfiap-users:${{ github.sha }} \
+            -n hackatonfiap
+          kubectl rollout status deployment/hackatonfiap-users -n hackatonfiap --timeout=120s

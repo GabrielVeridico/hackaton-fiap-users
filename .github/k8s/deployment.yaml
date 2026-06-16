@@ -1,15 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fgc-users
-  namespace: fcg
+  name: hackatonfiap-users
+  namespace: hackatonfiap
   labels:
-    app: fgc-users
+    app: hackatonfiap-users
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: fgc-users
+      app: hackatonfiap-users
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -18,30 +18,63 @@ spec:
   template:
     metadata:
       labels:
-        app: fgc-users
+        app: hackatonfiap-users
         azure.workload.identity/use: "true"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
     spec:
-      serviceAccountName: sa-fcg-users
+      serviceAccountName: sa-hackatonfiap-users
       volumes:
         - name: secrets-store
           csi:
             driver: secrets-store.csi.k8s.io
             readOnly: true
             volumeAttributes:
-              secretProviderClass: "fcg-users-secrets"
+              secretProviderClass: "hackatonfiap-users-secrets"
       containers:
-        - name: fgc-users
-          image: fcgregistry.azurecr.io/fgc-users:latest
+        - name: hackatonfiap-users
+          image: fcgregistry.azurecr.io/hackatonfiap-users:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
+              name: http
+            - containerPort: 8080
+              name: metrics
           volumeMounts:
             - name: secrets-store
               mountPath: "/mnt/secrets"
               readOnly: true
           envFrom:
             - secretRef:
-                name: fcg-users-secret
+                name: hackatonfiap-users-secret
+          env:
+            - name: ConnectionStrings__Default
+              valueFrom:
+                secretKeyRef:
+                  name: hackatonfiap-users-secret
+                  key: ConnectionStrings__Default
+            - name: Jwt__Key
+              valueFrom:
+                secretKeyRef:
+                  name: hackatonfiap-users-secret
+                  key: Jwt__Key
+            - name: Owner__Password
+              valueFrom:
+                secretKeyRef:
+                  name: hackatonfiap-users-secret
+                  key: Owner__Password
+            - name: Jwt__Issuer
+              value: "conexaosolidaria.local"
+            - name: Jwt__Audience
+              value: "conexaosolidaria.clients"
+            - name: Owner__Email
+              value: "owner@conexaosolidaria.org"
+            - name: Owner__Document
+              value: "52998224725"
+            - name: Owner__Name
+              value: "Owner"
           resources:
             requests:
               memory: "64Mi"
@@ -57,7 +90,6 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 5
-          
           readinessProbe:
             httpGet:
               path: /ready

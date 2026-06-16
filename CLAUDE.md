@@ -1,88 +1,196 @@
-﻿# CLAUDE.md
+# CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with this repository.
+
+## Service overview
+
+**HackatonFiap.Users** — Identity & Access microservice for the "Conexão Solidária" hackathon (FIAP PosTech). Handles user registration, authentication (JWT + refresh tokens), and user management. Self-contained: publishes **no cross-service events** in the MVP; auth/users are an isolated bounded context.
+
+- **.NET 8** / ASP.NET Core Web API
+- **Clean Architecture** — four source projects + one test project
+- **CQRS** — manual command/query handlers returning `Result<T>` (no MediatR)
+- **EF Core 8** (SQL Server), migrations applied automatically on startup
+- **JWT** (access + refresh tokens), **BCrypt** for password hashing
+- **Serilog** structured logging, **OpenTelemetry** (traces + metrics), **Prometheus** at `/metrics`
+- Roles (pt-BR values): `Doador`, `GestorONG`
+- Person types: `Individual` (PF/CPF), `Company` (PJ/CNPJ)
+- **57 unit tests** — xUnit + NSubstitute + FluentAssertions
 
 ## Build & Run Commands
 
 ```bash
-# Build the solution
-dotnet build
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
 
-# Run the API
+# Build solution
+dotnet build HackatonFiap.Users.sln -v minimal
+
+# Run API (requires env vars below)
 dotnet run --project src/HackatonFiap.Users.API
 
-# Run all tests (42 tests)
-dotnet test
+# Run all tests (57 tests)
+dotnet test --nologo
 
-# Run a specific test class
+# Run tests for a specific class
 dotnet test --filter "FullyQualifiedName~CreateUserCommandHandlerTests"
 
-# Run a single test
-dotnet test --filter "Name=HandleAsync_WithValidCommand_ShouldReturnSuccess"
-
-# Docker (SQL Server + API)
+# Docker (SQL Server + API together)
 docker compose up --build
+```
 
-# EF Core migrations
-dotnet ef migrations add MigrationName --project src/HackatonFiap.Users.Infrastructure --startup-project src/HackatonFiap.Users.API
-dotnet ef database update --project src/HackatonFiap.Users.Infrastructure --startup-project src/HackatonFiap.Users.API
+## EF Core Migrations (local tool)
+
+```bash
+# Restore the local tool first (one-time per machine)
+dotnet tool restore
+
+# Add a migration
+dotnet ef migrations add <MigrationName> \
+  --project src/HackatonFiap.Users.Infrastructure \
+  --startup-project src/HackatonFiap.Users.API
+
+# Apply pending migrations manually
+dotnet ef database update \
+  --project src/HackatonFiap.Users.Infrastructure \
+  --startup-project src/HackatonFiap.Users.API
+```
+
+The EF tooling is a **local** tool declared in `.config/dotnet-tools.json`; always run `dotnet tool restore` before `dotnet ef`.
+
+## Running locally
+
+Start SQL Server via Docker, then set environment variables and run:
+
+```bash
+# Start SQL Server
+docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=Your_password123" \
+  -p 1433:1433 -d mcr.microsoft.com/mssql/server:2022-latest
+
+# Required env vars
+export ConnectionStrings__Default="Server=localhost,1433;Database=HackatonFiapUsersDb;User Id=sa;Password=Your_password123;TrustServerCertificate=true;"
+export ASPNETCORE_ENVIRONMENT=Development
+
+# In Development, Jwt:Key and Owner:Password are auto-generated if absent.
+# The generated values are printed once to the console on first startup.
+# For non-Development environments they are REQUIRED (fail-fast):
+# export Jwt__Key="<32-byte minimum random key>"
+# export Owner__Password="<initial owner password>"
+
+dotnet run --project src/HackatonFiap.Users.API
 ```
 
 ## Architecture
 
-This is a .NET 9.0 Web API following **Clean Architecture** with **CQRS** pattern, organized in `src/` and `tests/`:
+```
+src/
+├── HackatonFiap.Users.Domain/           # Entities, Value Objects, Result<T>, UserRole enum
+├── HackatonFiap.Users.Application/      # CQRS handlers, DTOs, interfaces, error definitions
+├── HackatonFiap.Users.Infrastructure/   # EF Core, BCrypt, JWT, Serilog, OpenTelemetry
+└── HackatonFiap.Users.API/              # Controllers, middleware, DI wiring, Program.cs
 
-### Source Projects (`src/`)
+tests/
+└── HackatonFiap.Users.UnitTests/        # 57 unit tests
+```
 
-- **Domain** (`HackatonFiap.Users.Domain`) — Pure domain layer with no external dependencies. Contains `User` entity (with private setters, factory method), `Password` value object (validation only, no hashing), `UserRole` enum, domain events (`UserRegistered`, `UserProfileUpdated`), and Result pattern (`Result`, `Result<T>`, `Error`).
+**Dependency flow:** Domain ← Application ← Infrastructure; API → Application + Infrastructure
 
-- **Application** (`HackatonFiap.Users.Application`) — CQRS handlers, validators, interfaces, DTOs, and error definitions.
-  - **Commands**: `CreateUser`, `AuthenticateUser`, `UpdateProfile` — each with Command record, Handler, and Validator (FluentValidation).
-  - **Queries**: `GetProfile` — with Query record and Handler.
-  - **Interfaces**: `IUserRepository`, `IAuditService`, `IEventPublisher`, `IPasswordHasher`, `IJwtTokenGenerator`.
-  - All handlers return `Result<T>` instead of throwing exceptions.
+### Domain layer
 
-- **Infrastructure** (`HackatonFiap.Users.Infrastructure`) — EF Core persistence, audit, event publishers, JWT, BCrypt.
-  - `ApplicationDbContext` with `ApplyConfigurationsFromAssembly`.
-  - `UserConfiguration`: owned `Password` (column "PasswordHash"), `Role` as string, `IsActive` global query filter.
-  - `UserRepository` implements `IUserRepository`.
-  - `BcryptPasswordHasher` implements `IPasswordHasher`.
-  - `JwtTokenGenerator` implements `IJwtTokenGenerator`.
-  - `AuditService` with before/after JSON snapshots.
-  - `InMemoryEventPublisher` / `ServiceBusEventPublisher`.
+- `User` entity — private setters, factory method, `PersonType` (Individual/Company), `Document`, `UserRole` (Doador/GestorONG), `IsActive`
+- `RefreshToken` entity
+- `Document` value object (CPF/CNPJ validation)
+- `Result<T>` / `Error` — used by all handlers instead of throwing exceptions
 
-- **API** (`HackatonFiap.Users.API`) — Controllers, middlewares, DI wiring.
-  - `UsersController`: `/api/users/register`, `/api/users/me` (GET/PUT).
-  - `AuthController`: `/api/auth/login` (separated from users).
-  - `HealthController`: `/health`, `/ready`.
-  - `CorrelationMiddleware` + `RequestResponseLoggingMiddleware` (password masking).
+### Application layer
 
-### Test Project (`tests/`)
+- **Commands**: `Register`, `Login`, `RefreshToken`, `Logout`, `CreateUser`, `UpdateUser`, `ChangeRole`, `ActivateUser`, `DeactivateUser`, `UpdateProfile`, `ResetPassword`
+- **Queries**: `GetUsers`, `GetUserById`, `GetMe`
+- Interfaces: `IUserRepository`, `IRefreshTokenRepository`, `IPasswordHasher`, `IJwtTokenGenerator`
 
-- **UnitTests** (`HackatonFiap.Users.UnitTests`) — 42 tests covering all handlers, validators, domain entities, and value objects.
+### Infrastructure layer
+
+- `ApplicationDbContext` — EF Core, configurations from assembly
+- `UserRepository` / `RefreshTokenRepository`
+- `BcryptPasswordHasher`
+- `JwtTokenGenerator`
+- OpenTelemetry setup (traces + metrics exported to Prometheus)
+
+### API layer
+
+- `AuthController` — `/api/auth/*`
+- `UsersController` — `/api/users/*`
+- `HealthController` — `/health`, `/ready`
+- Prometheus metrics middleware — `/metrics`
+- `CorrelationMiddleware`, `RequestResponseLoggingMiddleware` (password masking)
 
 ## API Endpoints
 
-- `POST /api/users/register` — Register (name, email, password)
-- `POST /api/auth/login` — Authenticate, returns JWT
-- `GET /api/users/me` — Get profile (requires auth)
-- `PUT /api/users/me` — Update profile (requires auth)
-- `GET /health`, `GET /ready` — Health probes
+### Auth (public)
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `POST` | `/api/auth/register` | Donor self-registration — `{ personType, document, name, email, password }` → 201/400/409 |
+| `POST` | `/api/auth/login` | Authenticate — `{ email, password }` → 200 `{ accessToken, refreshToken, expiresIn }` / 401 |
+| `POST` | `/api/auth/refresh` | Refresh token — `{ refreshToken }` → 200/401 |
+| `POST` | `/api/auth/logout` | Revoke refresh token (requires auth) — `{ refreshToken }` → 204 |
+
+### Users (role-protected)
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| `POST` | `/api/users` | GestorONG/Owner | Create user `{ personType, document, name, email, password, role }` → 201/400/403/409 |
+| `PUT` | `/api/users/{id}` | GestorONG/Owner | Update user `{ name }` → 200/403/404 |
+| `PATCH` | `/api/users/{id}/role` | Owner only | Change role `{ role }` → 204/403/404 |
+| `PATCH` | `/api/users/{id}/deactivate` | GestorONG/Owner | Deactivate → 204/403/404 |
+| `PATCH` | `/api/users/{id}/reactivate` | GestorONG/Owner | Reactivate → 204/403/404 |
+| `GET` | `/api/users` | GestorONG | List users → 200 |
+| `GET` | `/api/users/{id}` | GestorONG | Get by id → 200/404 |
+
+### Self-service (authenticated)
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `GET` | `/api/users/me` | Get own profile |
+| `PUT` | `/api/users/me` | Update own profile `{ name }` |
+| `POST` | `/api/users/me/reset-password` | Change own password `{ currentPassword, newPassword }` |
+
+### Observability
+
+| Route | Description |
+|-------|-------------|
+| `GET /health` | Liveness probe |
+| `GET /ready` | Readiness probe |
+| `GET /metrics` | Prometheus metrics |
+
+## Configuration & Security Model
+
+Config keys (double-underscore = environment variable separator):
+
+| Key | Env Var | Notes |
+|-----|---------|-------|
+| `ConnectionStrings:Default` | `ConnectionStrings__Default` | SQL Server connection string |
+| `Jwt:Issuer` | `Jwt__Issuer` | Token issuer (`conexaosolidaria.local` default) |
+| `Jwt:Audience` | `Jwt__Audience` | Token audience (`conexaosolidaria.clients` default) |
+| `Jwt:Key` | `Jwt__Key` | Min 32 bytes. **Auto-generated in Development; required outside Development.** |
+| `Owner:Email` | `Owner__Email` | Seed owner email |
+| `Owner:Document` | `Owner__Document` | Seed owner CPF |
+| `Owner:Name` | `Owner__Name` | Seed owner name |
+| `Owner:Password` | `Owner__Password` | **Auto-generated in Development; required outside Development.** |
+| `ApplicationInsights:ConnectionString` | `ApplicationInsights__ConnectionString` | Optional; disabled if empty |
+
+**Security rule:** `Jwt:Key` and `Owner:Password` are **never committed to source**. In Development the app auto-generates them at startup and logs the values once. Outside Development the app fails fast if they are absent or empty.
 
 ## Testing Patterns
 
-- **xUnit** with **Moq** for mocking and **FluentAssertions** for assertions
-- All handlers tested via mocked interfaces (no EF InMemory needed for handler tests)
-- FluentValidation `TestHelper` for validator tests
-- AAA pattern (Arrange-Act-Assert)
-- Domain tests for `User` entity and `Password` value object
+- **xUnit** + **NSubstitute** (mocking) + **FluentAssertions** (assertions)
+- All handlers tested via mocked interfaces — no EF InMemory
+- AAA pattern (Arrange / Act / Assert)
+- Domain tests cover `User` entity, `Document` value object, `Result<T>`
 
-## Key Configuration
+## Key Dependencies
 
-Environment variables / config keys:
-- `ConnectionStrings:Default` — SQL Server connection string
-- `Jwt:Secret` (required, 32+ chars), `Jwt:Issuer`, `Jwt:Audience`
-- `ServiceBus:ConnectionString` — Optional; falls back to InMemoryEventPublisher
-- `ApplicationInsights:ConnectionString` — Optional Azure Monitor connection
-
-SQL Server configured with `EnableRetryOnFailure` (5 retries, 30s delay). EF migrations auto-applied on startup.
+- `Microsoft.EntityFrameworkCore.SqlServer` 8.x
+- `Microsoft.AspNetCore.Authentication.JwtBearer` 8.x
+- `BCrypt.Net-Next`
+- `Serilog.AspNetCore`
+- `OpenTelemetry.AspNetCore`, `OpenTelemetry.Exporter.Prometheus.AspNetCore`
+- `xunit`, `NSubstitute`, `FluentAssertions`

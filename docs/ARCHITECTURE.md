@@ -1,6 +1,6 @@
-﻿# Arquitetura do Sistema — FIAP Cloud Games (FCG)
+﻿# Arquitetura do Sistema — Conexão Solidária (HackatonFiap)
 
-Documentação de arquitetura e fluxo de comunicação entre os microsserviços do projeto FCG, desenvolvido na **Fase 3 do Tech Challenge — PosTech FIAP**.
+Documentação de arquitetura e fluxo de comunicação entre os microsserviços do projeto **Conexão Solidária**, desenvolvido para o Hackathon — PosTech FIAP.
 
 ## Visão Geral da Arquitetura
 
@@ -14,7 +14,7 @@ graph TB
 
     subgraph "Microsserviço de Usuários"
         UAPI[HackatonFiap.Users API<br/>:5081]
-        UDB[(SQL Server<br/>FGCUsersDb)]
+        UDB[(SQL Server<br/>HackatonFiapUsersDb)]
     end
 
     subgraph "Microsserviço de Jogos"
@@ -222,7 +222,7 @@ graph TB
         SQL[SQL Server 2022<br/>:1433]
         SBSQL[Azure SQL Edge<br/>ServiceBus internal]
         SBE[Service Bus Emulator<br/>:5672]
-        UAPI[fgc-users-api<br/>:5081]
+        UAPI[hackatonfiap-users<br/>:5081]
         GAPI[fcg-games-api<br/>:5105]
         PFUNC[fcg-payments-func<br/>:5098]
     end

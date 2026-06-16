@@ -1,8 +1,8 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: fgc-users-ingress
-  namespace: fcg
+  name: hackatonfiap-users-ingress
+  namespace: hackatonfiap
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
@@ -15,13 +15,13 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: fgc-users-svc
+                name: hackatonfiap-users-svc
                 port:
                   number: 80
           - path: /api/auth
             pathType: Prefix
             backend:
               service:
-                name: fgc-users-svc
+                name: hackatonfiap-users-svc
                 port:
                   number: 80

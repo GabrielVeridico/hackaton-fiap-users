@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: fgc-users-svc
-  namespace: fcg
+  name: hackatonfiap-users-svc
+  namespace: hackatonfiap
   labels:
-    app: fgc-users
+    app: hackatonfiap-users
 spec:
   selector:
-    app: fgc-users
+    app: hackatonfiap-users
   ports:
     - name: http
       protocol: TCP
