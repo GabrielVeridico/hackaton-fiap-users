@@ -16,7 +16,7 @@ public class User
 
     private User() { }
 
-    public static User Create(string name, string email, Password password, UserRole role = UserRole.User)
+    public static User Create(string name, string email, Password password, UserRole role = UserRole.Doador)
     {
         return new User
         {

@@ -12,13 +12,13 @@ public static class TestData
             "Test User",
             "test@example.com",
             new Password("$2a$11$hashedpasswordvalue"),
-            UserRole.User);
+            UserRole.Doador);
 
         public static User AnotherUser => User.Create(
             "Another User",
             "another@example.com",
             new Password("$2a$11$anotherhashedvalue"),
-            UserRole.User);
+            UserRole.Doador);
     }
 
     public static class Commands

@@ -42,10 +42,10 @@ public class UserEntityTests
     }
 
     [Fact]
-    public void Create_DefaultRole_ShouldBeUser()
+    public void Create_DefaultRole_ShouldBeDoador()
     {
         var user = User.Create("Test", "test@example.com", new Password("hashed"));
 
-        user.Role.Should().Be(UserRole.User);
+        user.Role.Should().Be(UserRole.Doador);
     }
 }

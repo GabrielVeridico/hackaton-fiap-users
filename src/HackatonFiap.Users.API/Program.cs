@@ -165,7 +165,7 @@ try
         {
             var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
             var hashedPassword = new Password(passwordHasher.Hash("superadmin!123"));
-            var admin = User.Create("Super Admin", "superadmin@fgc.com", hashedPassword, UserRole.Admin);
+            var admin = User.Create("Super Admin", "superadmin@fgc.com", hashedPassword, UserRole.GestorONG);
             db.Users.Add(admin);
             db.SaveChanges();
         }

@@ -39,7 +39,7 @@ public class CreateUserCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Email.Should().Be(command.Email);
         result.Value.Name.Should().Be(command.Name);
-        result.Value.Role.Should().Be("User");
+        result.Value.Role.Should().Be("Doador");
     }
 
     [Fact]

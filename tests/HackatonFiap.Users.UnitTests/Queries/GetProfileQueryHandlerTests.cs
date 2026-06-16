@@ -55,7 +55,7 @@ public class GetProfileQueryHandlerTests
         result.Value.Id.Should().Be(user.Id);
         result.Value.Email.Should().Be("full@example.com");
         result.Value.Name.Should().Be("Full Name");
-        result.Value.Role.Should().Be("User");
+        result.Value.Role.Should().Be("Doador");
         result.Value.CreatedAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
         result.Value.UpdatedAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }

@@ -2,6 +2,6 @@
 
 public enum UserRole
 {
-    User = 0,
-    Admin = 1
+    Doador = 0,
+    GestorONG = 1
 }
