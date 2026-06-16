@@ -8,4 +8,7 @@ public static class UserErrors
     public static Error InvalidCredentials => new("User.InvalidCredentials", "Invalid email or password.");
     public static Error NotFound => new("User.NotFound", "User not found.");
     public static Error InvalidPassword => new("User.InvalidPassword", "Password must be at least 8 characters with letters, digits, and special characters.");
+    public static Error DocumentInvalid => new("User.DocumentInvalid", "Document (CPF/CNPJ) is invalid.");
+    public static Error AlreadyRegisteredActive => new("User.AlreadyRegistered", "Email or document already registered.");
+    public static Error AlreadyRegisteredInactive => new("User.InactiveAccount", "Account exists but is inactive. Contact an administrator to reactivate.");
 }

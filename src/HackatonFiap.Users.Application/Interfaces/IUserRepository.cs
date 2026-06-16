@@ -8,4 +8,6 @@ public interface IUserRepository
     Task<User?> FindByEmailAsync(string email);
     Task SaveNewAsync(User user);
     Task UpdateAsync(User user);
+    Task<User?> FindByEmailIncludingInactiveAsync(string email);
+    Task<User?> FindByDocumentIncludingInactiveAsync(string documentValue);
 }

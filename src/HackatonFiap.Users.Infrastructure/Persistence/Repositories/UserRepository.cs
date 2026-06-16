@@ -35,4 +35,12 @@ public class UserRepository : IUserRepository
     {
         await _db.SaveChangesAsync();
     }
+
+    // Registration/admin path: bypasses the global query filter so inactive (soft-deleted) users are visible.
+    // Never used by the auth (login) path — login uses FindByEmailAsync which respects the filter.
+    public Task<User?> FindByEmailIncludingInactiveAsync(string email) =>
+        _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Email == email);
+
+    public Task<User?> FindByDocumentIncludingInactiveAsync(string documentValue) =>
+        _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Document.Value == documentValue);
 }
