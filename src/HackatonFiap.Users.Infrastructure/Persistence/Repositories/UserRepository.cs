@@ -13,9 +13,11 @@ public class UserRepository : IUserRepository
         _db = db;
     }
 
+    // Auth path: respeita o filtro global (soft-delete). Usuário inativo => null => credenciais inválidas (RN01.8).
+    // Buscas que precisam enxergar inativos (unicidade de cadastro/admin) usam métodos dedicados *IncludingInactiveAsync.
     public async Task<User?> FindByEmailAsync(string email)
     {
-        return await _db.Users.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(u => u.Email == email);
+        return await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email);
     }
 
     public async Task<User?> FindByIdAsync(Guid id)
