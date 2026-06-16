@@ -4,6 +4,7 @@ using HackatonFiap.Users.Application.DTOs;
 using HackatonFiap.Users.Application.Errors;
 using HackatonFiap.Users.Application.Interfaces;
 using HackatonFiap.Users.Domain.Entities;
+using HackatonFiap.Users.Domain.Enums;
 using HackatonFiap.Users.Domain.ValueObjects;
 using FluentAssertions;
 using NSubstitute;
@@ -28,7 +29,7 @@ public class AuthenticateUserCommandHandlerTests
     [Fact]
     public async Task HandleAsync_WithValidCredentials_ShouldReturnLoginResponse()
     {
-        var user = User.Create("Test", "test@example.com", new Password("hashed"));
+        var user = User.RegisterDonor(PersonType.Individual, Document.Create("52998224725", PersonType.Individual), "Test", "test@example.com", new Password("hashed"));
         var command = new AuthenticateUserCommand("test@example.com", "password123", "corr-id");
         var expectedResponse = new LoginResponse("jwt-token", DateTime.UtcNow.AddHours(1));
 
@@ -57,7 +58,7 @@ public class AuthenticateUserCommandHandlerTests
     [Fact]
     public async Task HandleAsync_WithWrongPassword_ShouldReturnInvalidCredentials()
     {
-        var user = User.Create("Test", "test@example.com", new Password("hashed"));
+        var user = User.RegisterDonor(PersonType.Individual, Document.Create("52998224725", PersonType.Individual), "Test", "test@example.com", new Password("hashed"));
         var command = new AuthenticateUserCommand("test@example.com", "wrongpassword", "corr-id");
 
         _userRepository.FindByEmailAsync(command.Email).Returns(user);
@@ -72,7 +73,7 @@ public class AuthenticateUserCommandHandlerTests
     [Fact]
     public async Task HandleAsync_WithValidCredentials_ShouldCallJwtTokenGenerator()
     {
-        var user = User.Create("Test", "test@example.com", new Password("hashed"));
+        var user = User.RegisterDonor(PersonType.Individual, Document.Create("52998224725", PersonType.Individual), "Test", "test@example.com", new Password("hashed"));
         var command = new AuthenticateUserCommand("test@example.com", "password123", "corr-id");
         var expectedResponse = new LoginResponse("jwt-token", DateTime.UtcNow.AddHours(1));
 

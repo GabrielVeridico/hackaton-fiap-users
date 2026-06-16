@@ -3,6 +3,7 @@ using HackatonFiap.Users.Application.Errors;
 using HackatonFiap.Users.Application.Interfaces;
 using HackatonFiap.Users.Application.Queries.GetProfile;
 using HackatonFiap.Users.Domain.Entities;
+using HackatonFiap.Users.Domain.Enums;
 using HackatonFiap.Users.Domain.ValueObjects;
 using FluentAssertions;
 using NSubstitute;
@@ -22,7 +23,7 @@ public class GetProfileQueryHandlerTests
     [Fact]
     public async Task HandleAsync_WithValidId_ShouldReturnProfile()
     {
-        var user = User.Create("Test User", "test@example.com", new Password("hashed"));
+        var user = User.RegisterDonor(PersonType.Individual, Document.Create("52998224725", PersonType.Individual), "Test User", "test@example.com", new Password("hashed"));
         _userRepository.FindByIdAsync(user.Id).Returns(user);
 
         var result = await _handler.HandleAsync(new GetProfileQuery(user.Id));
@@ -47,15 +48,19 @@ public class GetProfileQueryHandlerTests
     [Fact]
     public async Task HandleAsync_ShouldReturnCorrectFields()
     {
-        var user = User.Create("Full Name", "full@example.com", new Password("hashed"));
+        var user = User.RegisterDonor(PersonType.Individual, Document.Create("52998224725", PersonType.Individual), "Full Name", "full@example.com", new Password("hashed"));
         _userRepository.FindByIdAsync(user.Id).Returns(user);
 
         var result = await _handler.HandleAsync(new GetProfileQuery(user.Id));
 
         result.Value.Id.Should().Be(user.Id);
+        result.Value.PersonType.Should().Be("Individual");
+        result.Value.Document.Should().Be("52998224725");
         result.Value.Email.Should().Be("full@example.com");
         result.Value.Name.Should().Be("Full Name");
         result.Value.Role.Should().Be("Doador");
+        result.Value.IsActive.Should().BeTrue();
+        result.Value.IsOwner.Should().BeFalse();
         result.Value.CreatedAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
         result.Value.UpdatedAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }

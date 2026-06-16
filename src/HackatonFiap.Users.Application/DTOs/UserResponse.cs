@@ -1,9 +1,13 @@
-﻿namespace HackatonFiap.Users.Application.DTOs;
+namespace HackatonFiap.Users.Application.DTOs;
 
 public record UserResponse(
     Guid Id,
-    string Email,
+    string PersonType,
+    string Document,
     string Name,
+    string Email,
     string Role,
+    bool IsActive,
+    bool IsOwner,
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc);

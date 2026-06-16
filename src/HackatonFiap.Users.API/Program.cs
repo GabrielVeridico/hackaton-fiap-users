@@ -5,8 +5,6 @@ using HackatonFiap.Users.Domain.Entities;
 using HackatonFiap.Users.Domain.Enums;
 using HackatonFiap.Users.Domain.ValueObjects;
 using HackatonFiap.Users.Application.Commands.AuthenticateUser;
-using HackatonFiap.Users.Application.Commands.CreateUser;
-using HackatonFiap.Users.Application.Commands.UpdateProfile;
 using HackatonFiap.Users.Application.Interfaces;
 using HackatonFiap.Users.Application.Queries.GetProfile;
 using HackatonFiap.Users.Infrastructure.Audit;
@@ -94,9 +92,7 @@ try
                 errorNumbersToAdd: null)));
 
     // CQRS Handlers
-    builder.Services.AddScoped<CreateUserCommandHandler>();
     builder.Services.AddScoped<AuthenticateUserCommandHandler>();
-    builder.Services.AddScoped<UpdateProfileCommandHandler>();
     builder.Services.AddScoped<GetProfileQueryHandler>();
 
     // Infrastructure
@@ -147,7 +143,7 @@ try
 
     // FluentValidation
     builder.Services.AddFluentValidationAutoValidation();
-    builder.Services.AddValidatorsFromAssemblyContaining<CreateUserCommandValidator>();
+    builder.Services.AddValidatorsFromAssemblyContaining<HackatonFiap.Users.Application.Queries.GetProfile.GetProfileQuery>();
 
     // Middleware services
     builder.Services.AddHttpContextAccessor();
@@ -160,13 +156,19 @@ try
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         db.Database.Migrate();
 
-        // Seed: create default admin user if not exists
-        if (!db.Users.IgnoreQueryFilters().Any(u => u.Email == "superadmin@fgc.com"))
+        // Seed: provisional Owner if none exists (hardened in a later task)
+        if (!db.Users.IgnoreQueryFilters().Any(u => u.IsOwner))
         {
             var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-            var hashedPassword = new Password(passwordHasher.Hash("superadmin!123"));
-            var admin = User.Create("Super Admin", "superadmin@fgc.com", hashedPassword, UserRole.GestorONG);
-            db.Users.Add(admin);
+            var ownerPwd = app.Environment.IsDevelopment()
+                ? (configuration.GetValue<string>("Owner:Password") ?? "Owner@123")
+                : (configuration.GetValue<string>("Owner:Password") ?? throw new InvalidOperationException("Owner:Password must be configured outside Development."));
+            var owner = User.CreateOwner(
+                Document.Create(configuration.GetValue<string>("Owner:Document") ?? "52998224725", PersonType.Individual),
+                configuration.GetValue<string>("Owner:Name") ?? "Owner",
+                configuration.GetValue<string>("Owner:Email") ?? "owner@conexaosolidaria.org",
+                new Password(passwordHasher.Hash(ownerPwd)));
+            db.Users.Add(owner);
             db.SaveChanges();
         }
     }

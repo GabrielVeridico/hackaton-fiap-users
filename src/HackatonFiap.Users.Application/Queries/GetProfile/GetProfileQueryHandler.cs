@@ -21,7 +21,7 @@ public class GetProfileQueryHandler
             return Result<UserResponse>.Failure(UserErrors.NotFound);
 
         return Result<UserResponse>.Success(new UserResponse(
-            user.Id, user.Email, user.Name, user.Role.ToString(),
-            user.CreatedAtUtc, user.UpdatedAtUtc));
+            user.Id, user.PersonType.ToString(), user.Document.Value, user.Name, user.Email,
+            user.Role.ToString(), user.IsActive, user.IsOwner, user.CreatedAtUtc, user.UpdatedAtUtc));
     }
 }
