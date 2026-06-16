@@ -103,6 +103,15 @@ try
     builder.Services.AddScoped<RegisterDonorCommandHandler>();
     builder.Services.AddScoped<RefreshTokenCommandHandler>();
     builder.Services.AddScoped<LogoutCommandHandler>();
+    builder.Services.AddScoped<HackatonFiap.Users.Application.Commands.CreateUser.CreateUserCommandHandler>();
+    builder.Services.AddScoped<HackatonFiap.Users.Application.Commands.UpdateUser.UpdateUserCommandHandler>();
+    builder.Services.AddScoped<HackatonFiap.Users.Application.Commands.ChangeUserRole.ChangeUserRoleCommandHandler>();
+    builder.Services.AddScoped<HackatonFiap.Users.Application.Commands.DeactivateUser.DeactivateUserCommandHandler>();
+    builder.Services.AddScoped<HackatonFiap.Users.Application.Commands.ReactivateUser.ReactivateUserCommandHandler>();
+    builder.Services.AddScoped<HackatonFiap.Users.Application.Commands.UpdateMyProfile.UpdateMyProfileCommandHandler>();
+    builder.Services.AddScoped<HackatonFiap.Users.Application.Commands.ResetMyPassword.ResetMyPasswordCommandHandler>();
+    builder.Services.AddScoped<HackatonFiap.Users.Application.Queries.GetUserById.GetUserByIdQueryHandler>();
+    builder.Services.AddScoped<HackatonFiap.Users.Application.Queries.ListUsers.ListUsersQueryHandler>();
 
     // Infrastructure
     builder.Services.AddScoped<IUserRepository, UserRepository>();
