@@ -43,4 +43,13 @@ public class UserRepository : IUserRepository
 
     public Task<User?> FindByDocumentIncludingInactiveAsync(string documentValue) =>
         _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Document.Value == documentValue);
+
+    public async Task<IReadOnlyList<User>> ListAsync() =>
+        await _db.Users.IgnoreQueryFilters().AsNoTracking().OrderBy(u => u.Name).ToListAsync();
+
+    public Task<User?> FindOwnerAsync() =>
+        _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.IsOwner);
+
+    public Task<User?> FindByIdIncludingInactiveAsync(Guid id) =>
+        _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == id);
 }

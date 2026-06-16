@@ -1,4 +1,4 @@
-﻿using HackatonFiap.Users.Domain.Entities;
+using HackatonFiap.Users.Domain.Entities;
 
 namespace HackatonFiap.Users.Application.Interfaces;
 
@@ -10,4 +10,7 @@ public interface IUserRepository
     Task UpdateAsync(User user);
     Task<User?> FindByEmailIncludingInactiveAsync(string email);
     Task<User?> FindByDocumentIncludingInactiveAsync(string documentValue);
+    Task<IReadOnlyList<User>> ListAsync();
+    Task<User?> FindOwnerAsync();
+    Task<User?> FindByIdIncludingInactiveAsync(Guid id);
 }
