@@ -1,4 +1,4 @@
-# Arquitetura do Sistema — FIAP Cloud Games (FCG)
+﻿# Arquitetura do Sistema — FIAP Cloud Games (FCG)
 
 Documentação de arquitetura e fluxo de comunicação entre os microsserviços do projeto FCG, desenvolvido na **Fase 3 do Tech Challenge — PosTech FIAP**.
 
@@ -13,7 +13,7 @@ graph TB
     end
 
     subgraph "Microsserviço de Usuários"
-        UAPI[FGC.Users API<br/>:5081]
+        UAPI[HackatonFiap.Users API<br/>:5081]
         UDB[(SQL Server<br/>FGCUsersDb)]
     end
 
@@ -54,7 +54,7 @@ graph TB
 
 ```mermaid
 flowchart LR
-    subgraph Users["FGC.Users :5081"]
+    subgraph Users["HackatonFiap.Users :5081"]
         R[Register]
         L[Login]
         P[Profile]
@@ -90,7 +90,7 @@ flowchart LR
 ```mermaid
 sequenceDiagram
     actor U as 🎮 Usuário
-    participant UA as 👤 FGC.Users API
+    participant UA as 👤 HackatonFiap.Users API
     participant GA as 🕹️ FCG.Games API
     participant Q1 as 📨 Queue: order-placed
     participant PF as ⚡ ProcessPaymentFunction
@@ -188,14 +188,14 @@ graph LR
 |----|------|-----------|-------|
 | FCG.Games | FCG.Payments | Azure Service Bus (async) | `order-placed` |
 | FCG.Payments | FCG.Games | Azure Service Bus (async) | `payments-processed` |
-| Cliente | FGC.Users | REST (sync) | — |
+| Cliente | HackatonFiap.Users | REST (sync) | — |
 | Cliente | FCG.Games | REST (sync) | — |
 
 ### Segurança
 
 ```mermaid
 graph LR
-    U[Usuário] -->|1. Login| UA[FGC.Users API]
+    U[Usuário] -->|1. Login| UA[HackatonFiap.Users API]
     UA -->|2. JWT Token| U
     U -->|3. Bearer Token| GA[FCG.Games API]
     GA -->|4. Valida JWT<br/>mesma chave secreta| GA

@@ -1,8 +1,8 @@
-services:
-  fgc.users:
+﻿services:
+  HackatonFiap.Users:
     build:
       context: .
-      dockerfile: src/FGC.Users.API/Dockerfile
+      dockerfile: src/HackatonFiap.Users.API/Dockerfile
     ports:
       - "5000:8080"
     environment:

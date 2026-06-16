@@ -1,4 +1,4 @@
-# FGC.Users API
+﻿# HackatonFiap.Users API
 
 Microsserviço de cadastro, autenticação e gerenciamento de perfis de usuários, desenvolvido com .NET 8 e ASP.NET Core Web API. Projeto da **Fase 3 do Tech Challenge — PosTech FIAP**.
 
@@ -7,7 +7,7 @@ Microsserviço de cadastro, autenticação e gerenciamento de perfis de usuário
 ```mermaid
 graph LR
     Client([Cliente]) -->|HTTP| APIM[API Gateway]
-    APIM -->|/api/users/**| Users[FGC.Users API]
+    APIM -->|/api/users/**| Users[HackatonFiap.Users API]
     APIM -->|/api/games/**| Games[FCG.Games API]
 
     Games -->|OrderPlacedEvent| Q1[/order-placed/]
@@ -32,7 +32,7 @@ graph LR
 ```mermaid
 sequenceDiagram
     participant C as Cliente
-    participant U as FGC.Users API
+    participant U as HackatonFiap.Users API
     participant G as FCG.Games API
     participant DB as SQL Server
 
@@ -57,7 +57,7 @@ sequenceDiagram
 
 ```mermaid
 graph TB
-    subgraph "FGC.Users - Microsserviço de Usuários"
+    subgraph "HackatonFiap.Users - Microsserviço de Usuários"
         subgraph "API Layer"
             UC[UsersController]
             AC[AuthController]
@@ -108,12 +108,12 @@ O projeto segue **Clean Architecture** com **CQRS**, organizado em 4 camadas:
 
 ```
 src/
-├── FGC.Users.Domain/           # Entidades, Value Objects, Eventos (zero dependências NuGet)
-├── FGC.Users.Application/      # Commands, Queries, Handlers, Validators (FluentValidation), DTOs
-├── FGC.Users.Infrastructure/   # EF Core (SQL Server), BCrypt, JWT, Audit, Service Bus
-└── FGC.Users.API/              # Controllers, Middlewares, Startup (JWT + Swagger)
+├── HackatonFiap.Users.Domain/           # Entidades, Value Objects, Eventos (zero dependências NuGet)
+├── HackatonFiap.Users.Application/      # Commands, Queries, Handlers, Validators (FluentValidation), DTOs
+├── HackatonFiap.Users.Infrastructure/   # EF Core (SQL Server), BCrypt, JWT, Audit, Service Bus
+└── HackatonFiap.Users.API/              # Controllers, Middlewares, Startup (JWT + Swagger)
 tests/
-└── FGC.Users.UnitTests/        # 42 testes unitários (xUnit + Moq + FluentAssertions)
+└── HackatonFiap.Users.UnitTests/        # 42 testes unitários (xUnit + Moq + FluentAssertions)
 ```
 
 **Fluxo de dependências:** Domain ← Application ← Infrastructure; API → Application + Infrastructure
@@ -169,7 +169,7 @@ Pipeline GitHub Actions (`.github/workflows/ci-cd.yml`):
 dotnet build
 
 # Executar API (http://localhost:5081)
-dotnet run --project src/FGC.Users.API
+dotnet run --project src/HackatonFiap.Users.API
 
 # Executar testes (42 testes)
 dotnet test
@@ -179,7 +179,7 @@ dotnet test
 
 ```bash
 # Build
-docker build -f src/FGC.Users.API/Dockerfile -t fgc-users .
+docker build -f src/HackatonFiap.Users.API/Dockerfile -t fgc-users .
 
 # Run
 docker run -p 5081:8080 \

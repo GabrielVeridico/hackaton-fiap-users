@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 dotnet build
 
 # Run the API
-dotnet run --project src/FGC.Users.API
+dotnet run --project src/HackatonFiap.Users.API
 
 # Run all tests (42 tests)
 dotnet test
@@ -24,8 +24,8 @@ dotnet test --filter "Name=HandleAsync_WithValidCommand_ShouldReturnSuccess"
 docker compose up --build
 
 # EF Core migrations
-dotnet ef migrations add MigrationName --project src/FGC.Users.Infrastructure --startup-project src/FGC.Users.API
-dotnet ef database update --project src/FGC.Users.Infrastructure --startup-project src/FGC.Users.API
+dotnet ef migrations add MigrationName --project src/HackatonFiap.Users.Infrastructure --startup-project src/HackatonFiap.Users.API
+dotnet ef database update --project src/HackatonFiap.Users.Infrastructure --startup-project src/HackatonFiap.Users.API
 ```
 
 ## Architecture
@@ -34,15 +34,15 @@ This is a .NET 9.0 Web API following **Clean Architecture** with **CQRS** patter
 
 ### Source Projects (`src/`)
 
-- **Domain** (`FGC.Users.Domain`) — Pure domain layer with no external dependencies. Contains `User` entity (with private setters, factory method), `Password` value object (validation only, no hashing), `UserRole` enum, domain events (`UserRegistered`, `UserProfileUpdated`), and Result pattern (`Result`, `Result<T>`, `Error`).
+- **Domain** (`HackatonFiap.Users.Domain`) — Pure domain layer with no external dependencies. Contains `User` entity (with private setters, factory method), `Password` value object (validation only, no hashing), `UserRole` enum, domain events (`UserRegistered`, `UserProfileUpdated`), and Result pattern (`Result`, `Result<T>`, `Error`).
 
-- **Application** (`FGC.Users.Application`) — CQRS handlers, validators, interfaces, DTOs, and error definitions.
+- **Application** (`HackatonFiap.Users.Application`) — CQRS handlers, validators, interfaces, DTOs, and error definitions.
   - **Commands**: `CreateUser`, `AuthenticateUser`, `UpdateProfile` — each with Command record, Handler, and Validator (FluentValidation).
   - **Queries**: `GetProfile` — with Query record and Handler.
   - **Interfaces**: `IUserRepository`, `IAuditService`, `IEventPublisher`, `IPasswordHasher`, `IJwtTokenGenerator`.
   - All handlers return `Result<T>` instead of throwing exceptions.
 
-- **Infrastructure** (`FGC.Users.Infrastructure`) — EF Core persistence, audit, event publishers, JWT, BCrypt.
+- **Infrastructure** (`HackatonFiap.Users.Infrastructure`) — EF Core persistence, audit, event publishers, JWT, BCrypt.
   - `ApplicationDbContext` with `ApplyConfigurationsFromAssembly`.
   - `UserConfiguration`: owned `Password` (column "PasswordHash"), `Role` as string, `IsActive` global query filter.
   - `UserRepository` implements `IUserRepository`.
@@ -51,7 +51,7 @@ This is a .NET 9.0 Web API following **Clean Architecture** with **CQRS** patter
   - `AuditService` with before/after JSON snapshots.
   - `InMemoryEventPublisher` / `ServiceBusEventPublisher`.
 
-- **API** (`FGC.Users.API`) — Controllers, middlewares, DI wiring.
+- **API** (`HackatonFiap.Users.API`) — Controllers, middlewares, DI wiring.
   - `UsersController`: `/api/users/register`, `/api/users/me` (GET/PUT).
   - `AuthController`: `/api/auth/login` (separated from users).
   - `HealthController`: `/health`, `/ready`.
@@ -59,7 +59,7 @@ This is a .NET 9.0 Web API following **Clean Architecture** with **CQRS** patter
 
 ### Test Project (`tests/`)
 
-- **UnitTests** (`FGC.Users.UnitTests`) — 42 tests covering all handlers, validators, domain entities, and value objects.
+- **UnitTests** (`HackatonFiap.Users.UnitTests`) — 42 tests covering all handlers, validators, domain entities, and value objects.
 
 ## API Endpoints
 

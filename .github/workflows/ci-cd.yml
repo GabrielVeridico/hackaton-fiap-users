@@ -1,4 +1,4 @@
-name: CI/CD
+﻿name: CI/CD
 on:
   push:
     branches: [master]
@@ -21,13 +21,13 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore FGC.Users.sln
+        run: dotnet restore HackatonFiap.Users.sln
 
       - name: Build
-        run: dotnet build FGC.Users.sln --configuration Release --no-restore
+        run: dotnet build HackatonFiap.Users.sln --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test FGC.Users.sln --configuration Release --no-build --verbosity normal
+        run: dotnet test HackatonFiap.Users.sln --configuration Release --no-build --verbosity normal
 
   cd:
     name: Deploy to AKS
@@ -55,7 +55,7 @@ jobs:
       - name: Build Docker image
         run: |
           IMAGE=${{ secrets.ACR_NAME }}.azurecr.io/fgc-users
-          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest -f src/FGC.Users.API/Dockerfile .
+          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest -f src/HackatonFiap.Users.API/Dockerfile .
 
       - name: Security Scan (Trivy)
         uses: aquasecurity/trivy-action@master
