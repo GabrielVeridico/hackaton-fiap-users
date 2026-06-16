@@ -11,4 +11,5 @@ public static class UserErrors
     public static Error DocumentInvalid => new("User.DocumentInvalid", "Document (CPF/CNPJ) is invalid.");
     public static Error AlreadyRegisteredActive => new("User.AlreadyRegistered", "Email or document already registered.");
     public static Error AlreadyRegisteredInactive => new("User.InactiveAccount", "Account exists but is inactive. Contact an administrator to reactivate.");
+    public static Error InvalidRefreshToken => new("Auth.InvalidRefreshToken", "Refresh token is invalid, expired or revoked.");
 }

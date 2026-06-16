@@ -5,6 +5,7 @@ using HackatonFiap.Users.Domain.Entities;
 using HackatonFiap.Users.Domain.Enums;
 using HackatonFiap.Users.Domain.ValueObjects;
 using HackatonFiap.Users.Application.Commands.AuthenticateUser;
+using HackatonFiap.Users.Application.Commands.RefreshTokenFlow;
 using HackatonFiap.Users.Application.Commands.RegisterDonor;
 using HackatonFiap.Users.Application.Interfaces;
 using HackatonFiap.Users.Application.Queries.GetProfile;
@@ -99,6 +100,7 @@ try
     builder.Services.AddScoped<AuthenticateUserCommandHandler>();
     builder.Services.AddScoped<GetProfileQueryHandler>();
     builder.Services.AddScoped<RegisterDonorCommandHandler>();
+    builder.Services.AddScoped<RefreshTokenCommandHandler>();
 
     // Infrastructure
     builder.Services.AddScoped<IUserRepository, UserRepository>();

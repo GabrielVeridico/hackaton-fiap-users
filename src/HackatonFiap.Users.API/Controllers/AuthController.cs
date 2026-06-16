@@ -1,5 +1,6 @@
 ﻿using HackatonFiap.Users.API.Middlewares;
 using HackatonFiap.Users.Application.Commands.AuthenticateUser;
+using HackatonFiap.Users.Application.Commands.RefreshTokenFlow;
 using HackatonFiap.Users.Application.Commands.RegisterDonor;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,15 +12,18 @@ public class AuthController : ControllerBase
 {
     private readonly AuthenticateUserCommandHandler _authenticateHandler;
     private readonly RegisterDonorCommandHandler _registerDonorHandler;
+    private readonly RefreshTokenCommandHandler _refreshHandler;
     private readonly ICorrelationContext _correlation;
 
     public AuthController(
         AuthenticateUserCommandHandler authenticateHandler,
         RegisterDonorCommandHandler registerDonorHandler,
+        RefreshTokenCommandHandler refreshHandler,
         ICorrelationContext correlation)
     {
         _authenticateHandler = authenticateHandler;
         _registerDonorHandler = registerDonorHandler;
+        _refreshHandler = refreshHandler;
         _correlation = correlation;
     }
 
@@ -50,7 +54,17 @@ public class AuthController : ControllerBase
         }
         return StatusCode(StatusCodes.Status201Created, result.Value);
     }
+
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
+    {
+        var result = await _refreshHandler.HandleAsync(new RefreshTokenCommand(request.RefreshToken, _correlation.CorrelationId));
+        if (result.IsFailure)
+            return Unauthorized(new ProblemDetails { Title = result.Error.Description, Detail = result.Error.Code });
+        return Ok(result.Value);
+    }
 }
 
 public record LoginRequest(string Email, string Password);
 public record RegisterDonorRequest(HackatonFiap.Users.Domain.Enums.PersonType PersonType, string Document, string Name, string Email, string Password);
+public record RefreshRequest(string RefreshToken);
