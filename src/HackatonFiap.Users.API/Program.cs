@@ -91,9 +91,10 @@ try
         });
     });
 
-    // Database — Azure SQL Serverless (auto-pause/resume may take up to 60s)
-    var connectionString = configuration.GetValue<string>("ConnectionStrings:Default")
-        ?? "Server=localhost,1433;Database=HackatonFiapUsersDb;User Id=sa;Password=Your_password123;TrustServerCertificate=true;";
+    // Database — connection string fornecida em runtime (env var / Key Vault / user-secrets). Sem segredo hardcoded.
+    var connectionString = configuration.GetValue<string>("ConnectionStrings:Default");
+    if (string.IsNullOrWhiteSpace(connectionString))
+        throw new InvalidOperationException("ConnectionStrings:Default must be configured (env var 'ConnectionStrings__Default' / Key Vault / user-secrets).");
     builder.Services.AddDbContext<ApplicationDbContext>(opt =>
         opt.UseSqlServer(connectionString, sql =>
             sql.EnableRetryOnFailure(
