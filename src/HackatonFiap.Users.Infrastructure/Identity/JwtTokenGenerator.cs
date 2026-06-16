@@ -20,9 +20,12 @@ public class JwtTokenGenerator : IJwtTokenGenerator
 
     public LoginResponse GenerateToken(User user)
     {
-        var issuer = _configuration.GetValue<string>("Jwt:Issuer") ?? "fgc.local";
-        var audience = _configuration.GetValue<string>("Jwt:Audience") ?? "fgc.clients";
-        var secret = _configuration.GetValue<string>("Jwt:Key") ?? "super-secret-key-for-dev-environment-only";
+        var issuer = _configuration.GetValue<string>("Jwt:Issuer") ?? "conexaosolidaria.local";
+        var audience = _configuration.GetValue<string>("Jwt:Audience") ?? "conexaosolidaria.clients";
+        var secret = _configuration.GetValue<string>("Jwt:Key")
+            ?? throw new InvalidOperationException("Jwt:Key must be configured via secret store/Key Vault/env — no insecure fallback.");
+        if (System.Text.Encoding.UTF8.GetByteCount(secret) < 32)
+            throw new InvalidOperationException("Jwt:Key must be at least 32 bytes of high-entropy data.");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
 
         var claims = new[]

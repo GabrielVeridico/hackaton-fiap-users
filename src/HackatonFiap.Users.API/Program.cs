@@ -114,9 +114,20 @@ try
     }
 
     // Authentication
-    var jwtIssuer = configuration.GetValue<string>("Jwt:Issuer") ?? "fgc.local";
-    var jwtAudience = configuration.GetValue<string>("Jwt:Audience") ?? "fgc.clients";
-    var jwtKey = configuration.GetValue<string>("Jwt:Key") ?? "super-secret-key-for-dev-environment-only";
+    var jwtIssuer = configuration.GetValue<string>("Jwt:Issuer") ?? "conexaosolidaria.local";
+    var jwtAudience = configuration.GetValue<string>("Jwt:Audience") ?? "conexaosolidaria.clients";
+    var jwtKey = configuration.GetValue<string>("Jwt:Key");
+    if (string.IsNullOrEmpty(jwtKey))
+    {
+        if (!builder.Environment.IsDevelopment())
+            throw new InvalidOperationException("Jwt:Key must be configured (Key Vault/secret/env) outside Development.");
+        // DEV sem chave configurada: gera chave aleatória e a disponibiliza via IConfiguration (tokens invalidam ao reiniciar).
+        jwtKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
+        configuration["Jwt:Key"] = jwtKey;
+        Log.Warning("Jwt:Key nao configurada — usando chave aleatoria de DEV (tokens invalidam ao reiniciar).");
+    }
+    if (Encoding.UTF8.GetByteCount(jwtKey) < 32)
+        throw new InvalidOperationException("Jwt:Key must be at least 32 bytes of high-entropy data.");
     var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
 
     builder.Services.AddAuthentication(options =>
@@ -160,9 +171,15 @@ try
         if (!db.Users.IgnoreQueryFilters().Any(u => u.IsOwner))
         {
             var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-            var ownerPwd = app.Environment.IsDevelopment()
-                ? (configuration.GetValue<string>("Owner:Password") ?? "Owner@123")
-                : (configuration.GetValue<string>("Owner:Password") ?? throw new InvalidOperationException("Owner:Password must be configured outside Development."));
+            var ownerPwd = configuration.GetValue<string>("Owner:Password");
+            if (string.IsNullOrEmpty(ownerPwd))
+            {
+                if (!app.Environment.IsDevelopment())
+                    throw new InvalidOperationException("Owner:Password must be configured (Key Vault/secret) outside Development.");
+                // DEV sem senha configurada: gera senha forte unica e loga uma vez (sem literal em codigo).
+                ownerPwd = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(18)) + "Aa1!";
+                Log.Warning("Owner seed criado com senha gerada para DEV (configure Owner:Password para fixar): {OwnerPassword}", ownerPwd);
+            }
             var owner = User.CreateOwner(
                 Document.Create(configuration.GetValue<string>("Owner:Document") ?? "52998224725", PersonType.Individual),
                 configuration.GetValue<string>("Owner:Name") ?? "Owner",
