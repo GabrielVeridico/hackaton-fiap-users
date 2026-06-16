@@ -1,4 +1,5 @@
 ﻿using HackatonFiap.Users.API.Middlewares;
+using HackatonFiap.Users.API.Observability;
 using HackatonFiap.Users.Application.Commands.AuthenticateUser;
 using HackatonFiap.Users.Application.Commands.Logout;
 using HackatonFiap.Users.Application.Commands.RefreshTokenFlow;
@@ -41,6 +42,7 @@ public class AuthController : ControllerBase
         if (result.IsFailure)
             return Unauthorized(new ProblemDetails { Title = result.Error.Description });
 
+        Telemetry.LoginsTotal.Add(1);
         return Ok(result.Value);
     }
 
@@ -57,6 +59,7 @@ public class AuthController : ControllerBase
                 return Conflict(new ProblemDetails { Title = result.Error.Description, Detail = result.Error.Code });
             return BadRequest(new ProblemDetails { Title = result.Error.Description, Detail = result.Error.Code });
         }
+        Telemetry.RegistrationsTotal.Add(1);
         return StatusCode(StatusCodes.Status201Created, result.Value);
     }
 

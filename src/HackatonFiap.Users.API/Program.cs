@@ -22,6 +22,10 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using HackatonFiap.Users.API.Observability;
 using Serilog;
 using Serilog.Sinks.ApplicationInsights.TelemetryConverters;
 
@@ -180,6 +184,22 @@ try
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddScoped<ICorrelationContext, CorrelationContext>();
 
+    // OpenTelemetry (traces + metrics)
+    var otelResource = ResourceBuilder.CreateDefault().AddService(Telemetry.ServiceName);
+    builder.Services.AddOpenTelemetry()
+        .WithTracing(t => t
+            .SetResourceBuilder(otelResource)
+            .AddSource(Telemetry.ServiceName)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddEntityFrameworkCoreInstrumentation())
+        .WithMetrics(m => m
+            .SetResourceBuilder(otelResource)
+            .AddMeter(Telemetry.ServiceName)
+            .AddAspNetCoreInstrumentation()
+            .AddRuntimeInstrumentation()
+            .AddPrometheusExporter());
+
     var app = builder.Build();
 
     using (var scope = app.Services.CreateScope())
@@ -228,6 +248,8 @@ try
     app.UseAuthorization();
 
     app.MapControllers();
+
+    app.MapPrometheusScrapingEndpoint("/metrics");
 
     app.Run();
 }
