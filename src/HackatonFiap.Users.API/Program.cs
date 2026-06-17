@@ -19,6 +19,7 @@ using HackatonFiap.Users.Infrastructure.Security;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
@@ -177,6 +178,10 @@ try
 
     builder.Services.AddAuthorization();
 
+    // Health checks — /health (liveness) e /ready (readiness com checagem do SQL Server)
+    builder.Services.AddHealthChecks()
+        .AddDbContextCheck<ApplicationDbContext>(name: "sqlserver", tags: new[] { "ready" });
+
     // FluentValidation
     builder.Services.AddFluentValidationAutoValidation();
     builder.Services.AddValidatorsFromAssemblyContaining<HackatonFiap.Users.Application.Queries.GetProfile.GetProfileQuery>();
@@ -249,6 +254,18 @@ try
     app.UseAuthorization();
 
     app.MapControllers();
+
+    // Liveness: o processo está de pé e respondendo (não checa dependências).
+    app.MapHealthChecks("/health", new HealthCheckOptions
+    {
+        Predicate = _ => false
+    });
+
+    // Readiness: pronto para receber tráfego — checa dependências (SQL Server via DbContext).
+    app.MapHealthChecks("/ready", new HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready")
+    });
 
     app.MapPrometheusScrapingEndpoint("/metrics");
 

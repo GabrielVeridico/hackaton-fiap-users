@@ -118,7 +118,7 @@ tests/
 
 - `AuthController` — `/api/auth/*`
 - `UsersController` — `/api/users/*`
-- `HealthController` — `/health`, `/ready`
+- ASP.NET Core Health Checks — `/health` (liveness, no dependency check) and `/ready` (readiness, checks SQL Server via `AddDbContextCheck<ApplicationDbContext>`)
 - Prometheus metrics middleware — `/metrics`
 - `CorrelationMiddleware`, `RequestResponseLoggingMiddleware` (password masking)
 
@@ -157,8 +157,8 @@ tests/
 
 | Route | Description |
 |-------|-------------|
-| `GET /health` | Liveness probe |
-| `GET /ready` | Readiness probe |
+| `GET /health` | Liveness probe (no dependency check) |
+| `GET /ready` | Readiness probe — checks SQL Server connectivity (returns 503 when DB is unreachable) |
 | `GET /metrics` | Prometheus metrics |
 
 ## Configuration & Security Model
