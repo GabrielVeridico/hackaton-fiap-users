@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: hackatonfiap-users
-  namespace: hackatonfiap
+  namespace: conexao-solidaria
   labels:
     app: hackatonfiap-users
 spec:

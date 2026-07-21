@@ -1,16 +1,16 @@
-﻿name: CI/CD
+name: CI/CD
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   ci:
-    name: Build & Test
+    name: Build, Test & Image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,11 +29,18 @@ jobs:
       - name: Test
         run: dotnet test HackatonFiap.Users.sln --configuration Release --no-build --verbosity normal
 
+      # RT5: a geração da imagem Docker é obrigatória a cada push na branch principal.
+      # Roda SEMPRE (não depende de credenciais de registry); o push/deploy é opcional (job cd).
+      - name: Build Docker image
+        run: docker build -t hackatonfiap-users:${{ github.sha }} -f src/HackatonFiap.Users.API/Dockerfile .
+
   cd:
-    name: Deploy to AKS
+    name: Deploy to AKS (opcional)
     runs-on: ubuntu-latest
     needs: ci
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # Deploy só quando habilitado explicitamente (variável DEPLOY_TO_AKS=true) e em push na main.
+    # Assim a esteira obrigatória (build + testes + imagem) permanece verde mesmo sem infra Azure provisionada.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TO_AKS == 'true'
     permissions:
       security-events: write
       actions: read
@@ -93,5 +100,5 @@ jobs:
         run: |
           kubectl set image deployment/hackatonfiap-users \
             hackatonfiap-users=${{ secrets.ACR_NAME }}.azurecr.io/hackatonfiap-users:${{ github.sha }} \
-            -n hackatonfiap
-          kubectl rollout status deployment/hackatonfiap-users -n hackatonfiap --timeout=120s
+            -n conexao-solidaria
+          kubectl rollout status deployment/hackatonfiap-users -n conexao-solidaria --timeout=120s
