@@ -1,7 +1,7 @@
 using HackatonFiap.Users.Domain.Entities;
 
 namespace HackatonFiap.Users.Application.DTOs;
-
+// UserResponse is a DTO that represents the response of a user in the application layer.
 public record UserResponse(
     Guid Id,
     string PersonType,
