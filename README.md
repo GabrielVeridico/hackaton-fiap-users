@@ -1,174 +1,75 @@
 # HackatonFiap.Users — UserAPI
 
-Microsserviço de **Identidade e Acesso** para a plataforma "Conexão Solidária" (FIAP PosTech Hackathon). Gerencia cadastro de usuários, autenticação JWT com refresh token e controle de acesso por papel.
+Microsserviço de **Identidade & Acesso** da plataforma **Conexão Solidária** (Hackathon FIAP PosTech): cadastro de usuários (PF/PJ), autenticação **JWT + refresh token rotativo** e **RBAC** por papel. É um bounded context isolado — **não publica eventos cross-service**.
 
-**Self-contained:** não publica eventos cross-service no MVP; auth/users são um bounded context isolado.
+> **Ecossistema (6 repos):** `users` (este) · `donations` · `payments` · `notifications` · `front` · `orchestration`. Mapa completo no [orchestration](https://github.com/GabrielVeridico/hackaton-fiap-orchestration#-ecossistema).
 
-## Tecnologias
+## Stack & escolhas
+- **.NET 8 / ASP.NET Core**, **Clean Architecture** (Domain → Application → Infrastructure → API).
+- **CQRS manual** (handlers + `Result<T>`, **sem MediatR**) — simplicidade e controle explícito do fluxo, sem dependência extra.
+- **EF Core 8 + SQL Server** (database-per-service; migrations aplicadas no startup).
+- **JWT** (access 4h) + **refresh token** rotativo 7d (hash SHA-256, detecção de reuso); **BCrypt** para senha.
+- **Serilog** + **OpenTelemetry** (traces + métricas → `/metrics` Prometheus).
+- Testes: **xUnit + NSubstitute + FluentAssertions** (57).
 
-- .NET 8 / ASP.NET Core Web API
-- Entity Framework Core 8 (SQL Server) — migrations automáticas no startup
-- JWT (access + refresh token), BCrypt
-- Serilog, OpenTelemetry (traces + métricas), Prometheus em `/metrics`
-- xUnit + NSubstitute + FluentAssertions (57 testes)
-
-## Pré-requisitos
-
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8)
-- [Docker](https://www.docker.com/) (para SQL Server local)
-
-## Rodando localmente
-
-### 1. Suba o SQL Server
-
-```bash
-docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=Your_password123" \
-  -p 1433:1433 --name sqlserver \
-  -d mcr.microsoft.com/mssql/server:2022-latest
-```
-
-### 2. Configure as variáveis de ambiente
-
-```bash
-export ASPNETCORE_ENVIRONMENT=Development
-export ConnectionStrings__Default="Server=localhost,1433;Database=HackatonFiapUsersDb;User Id=sa;Password=Your_password123;TrustServerCertificate=true;"
-```
-
-Em **Development**, `Jwt__Key` e `Owner__Password` são **gerados automaticamente** se ausentes. Os valores gerados são impressos uma vez no console no primeiro startup — guarde a senha do Owner para acessar a API.
-
-Em ambientes não-Development esses valores são **obrigatórios** (a aplicação falha no startup se estiverem vazios):
-
-```bash
-export Jwt__Key="<chave aleatória de 32+ bytes>"
-export Owner__Password="<senha inicial do owner>"
-```
-
-### 3. Execute a API
+## Como rodar localmente
+Pré-requisitos: **.NET 8 SDK** e **Docker** (para o SQL Server).
 
 ```bash
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
+
+# 1) SQL Server
+docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=Your_password123" \
+  -p 1433:1433 --name sqlserver -d mcr.microsoft.com/mssql/server:2022-latest
+
+# 2) Variáveis (em Development, Jwt__Key e Owner__Password são gerados e impressos no log)
+export ASPNETCORE_ENVIRONMENT=Development
+export ASPNETCORE_URLS=http://localhost:5001          # porta do ecossistema (docker-compose)
+export ConnectionStrings__Default="Server=localhost,1433;Database=HackatonFiapUsersDb;User Id=sa;Password=Your_password123;TrustServerCertificate=true;"
+
+# 3) Executar (migrations aplicam no startup)
 dotnet run --project src/HackatonFiap.Users.API
 ```
+API em `http://localhost:5001`. Ambiente completo (3 serviços + saga) em [orchestration/local](https://github.com/GabrielVeridico/hackaton-fiap-orchestration/tree/master/local). Alternativa: `docker compose up --build`.
 
-A API estará disponível em `http://localhost:5081`. As migrations são aplicadas automaticamente.
-
-### Alternativa: Docker Compose (SQL Server + API)
-
-```bash
-docker compose up --build
-```
+> Fora de Development, `Jwt__Key` e `Owner__Password` são **obrigatórios** (fail-fast). Nunca commitados — em produção vêm do **Azure Key Vault**.
 
 ## Endpoints
+**Auth (`/api/auth`, público):** `POST /register` (201) · `POST /login` → `{ accessToken, refreshToken, expiresIn }` · `POST /refresh` · `POST /logout` (204).
 
-### Autenticação (público)
+**Usuários (`/api/users`, autenticado):**
+
+| Método | Rota | Permissão |
+|--------|------|-----------|
+| POST | `/api/users` | GestorONG/Owner |
+| PUT | `/api/users/{id}` | GestorONG/Owner |
+| PATCH | `/api/users/{id}/role` | **Owner** |
+| PATCH | `/api/users/{id}/deactivate` · `/reactivate` | GestorONG/Owner |
+| GET | `/api/users` · `/api/users/{id}` | GestorONG |
+| GET/PUT | `/api/users/me` · POST `/api/users/me/reset-password` | Autenticado |
+
+Papéis: `Doador`, `GestorONG` (o **Owner** é um GestorONG com `isOwner`, semeado no startup e imutável). Observabilidade: `/health`, `/ready`, `/metrics`.
 
 ```bash
-# Registrar doador
-curl -X POST http://localhost:5081/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"personType":"Individual","document":"52998224725","name":"João Silva","email":"joao@email.com","password":"Senha@123"}'
-# → 201 Created
-
-# Login
-curl -X POST http://localhost:5081/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"joao@email.com","password":"Senha@123"}'
-# → 200 { "accessToken": "eyJ...", "refreshToken": "...", "expiresIn": 3600 }
-
-# Renovar token
-curl -X POST http://localhost:5081/api/auth/refresh \
-  -H "Content-Type: application/json" \
-  -d '{"refreshToken":"<refresh_token>"}'
-# → 200 { "accessToken": "...", "refreshToken": "...", "expiresIn": 3600 }
-
-# Logout (revoga refresh token)
-curl -X POST http://localhost:5081/api/auth/logout \
-  -H "Authorization: Bearer <access_token>" \
-  -H "Content-Type: application/json" \
-  -d '{"refreshToken":"<refresh_token>"}'
-# → 204 No Content
+# Exemplo: login
+curl -X POST http://localhost:5001/api/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"owner@conexaosolidaria.org","password":"<senha do owner>"}'
 ```
-
-### Usuários (autenticado)
-
-| Método | Rota | Permissão | Descrição |
-|--------|------|-----------|-----------|
-| `POST` | `/api/users` | GestorONG/Owner | Criar usuário com papel específico |
-| `PUT` | `/api/users/{id}` | GestorONG/Owner | Atualizar nome |
-| `PATCH` | `/api/users/{id}/role` | Owner | Alterar papel |
-| `PATCH` | `/api/users/{id}/deactivate` | GestorONG/Owner | Desativar |
-| `PATCH` | `/api/users/{id}/reactivate` | GestorONG/Owner | Reativar |
-| `GET` | `/api/users` | GestorONG | Listar usuários |
-| `GET` | `/api/users/{id}` | GestorONG | Buscar por ID |
-| `GET` | `/api/users/me` | Autenticado | Perfil próprio |
-| `PUT` | `/api/users/me` | Autenticado | Atualizar perfil próprio |
-| `POST` | `/api/users/me/reset-password` | Autenticado | Alterar senha |
-
-Papéis disponíveis: `Doador`, `GestorONG`
-
-### Observabilidade
-
-| Rota | Descrição |
-|------|-----------|
-| `GET /health` | Liveness probe |
-| `GET /ready` | Readiness probe |
-| `GET /metrics` | Métricas Prometheus |
 
 ## Testes
-
 ```bash
-export DOTNET_CLI_TELEMETRY_OPTOUT=1
-dotnet test --nologo
+dotnet test --nologo   # 57 testes (domínio, handlers, validators)
 ```
 
-57 testes unitários com **xUnit + NSubstitute + FluentAssertions**. Cobrem todos os handlers, validators e entidades de domínio.
+## CI/CD
+`.github/workflows/ci-cd.yml` (GitHub Actions): a cada push/PR na `main` → **build + test + build da imagem Docker** (sempre, sem depender de secrets). O job de **deploy é opcional/gated** por `vars.DEPLOY_TO_AKS == 'true'` — a CI passa verde sem credenciais Azure.
 
-## Migrations (EF Core)
+## Deploy
+Gated no CI (push na `main` + `DEPLOY_TO_AKS=true`): `docker build`/push para o **ACR** → `kubectl apply` dos manifests (`.github/k8s/`) + `kubectl set image` no namespace **`conexao-solidaria`** do AKS. Segredos via **Key Vault + CSI + Workload Identity**. Runbook completo em [orchestration/iac/DEPLOY-AZURE.md](https://github.com/GabrielVeridico/hackaton-fiap-orchestration/blob/master/iac/DEPLOY-AZURE.md).
 
-A ferramenta EF é um **local tool** declarada em `.config/dotnet-tools.json`.
-
-```bash
-# Restaurar a ferramenta (uma vez por máquina)
-dotnet tool restore
-
-# Adicionar nova migration
-dotnet ef migrations add <NomeDaMigration> \
-  --project src/HackatonFiap.Users.Infrastructure \
-  --startup-project src/HackatonFiap.Users.API
-
-# Aplicar manualmente (opcional — o startup já aplica automaticamente)
-dotnet ef database update \
-  --project src/HackatonFiap.Users.Infrastructure \
-  --startup-project src/HackatonFiap.Users.API
+## Arquitetura & migrations
 ```
-
-## Configuração
-
-| Variável de Ambiente | Descrição |
-|----------------------|-----------|
-| `ConnectionStrings__Default` | Connection string do SQL Server |
-| `Jwt__Issuer` | Emissor do JWT (padrão: `conexaosolidaria.local`) |
-| `Jwt__Audience` | Audiência do JWT (padrão: `conexaosolidaria.clients`) |
-| `Jwt__Key` | Chave secreta (32+ bytes). Auto-gerada em Development; **obrigatória** fora de Development. |
-| `Owner__Email` | Email do usuário owner seed |
-| `Owner__Document` | CPF do owner seed |
-| `Owner__Name` | Nome do owner seed |
-| `Owner__Password` | Senha do owner. Auto-gerada em Development (impressa no log); **obrigatória** fora de Development. |
-| `ApplicationInsights__ConnectionString` | Application Insights (opcional) |
-
-> **Segurança:** `Jwt__Key` e `Owner__Password` nunca devem estar em arquivos versionados. Em Development, o app os gera automaticamente e imprime no console. Em produção/staging, forneça via env vars ou Azure Key Vault.
-
-## Arquitetura
-
+src/  Domain (entidades, VOs, Result<T>) · Application (CQRS handlers, DTOs) · Infrastructure (EF, BCrypt, JWT, OTel) · API (controllers, DI)
+tests/ HackatonFiap.Users.UnitTests
 ```
-src/
-├── HackatonFiap.Users.Domain/           # Entidades, Value Objects, Result<T>
-├── HackatonFiap.Users.Application/      # Handlers CQRS, DTOs, interfaces
-├── HackatonFiap.Users.Infrastructure/   # EF Core, BCrypt, JWT, OpenTelemetry
-└── HackatonFiap.Users.API/              # Controllers, middleware, DI
-
-tests/
-└── HackatonFiap.Users.UnitTests/        # 57 testes unitários
-```
-
-CI/CD: GitHub Actions — restore → build → test → Docker image → AKS deploy (`.github/workflows/ci-cd.yml`).
+EF Core é **local tool** (`.config/dotnet-tools.json`): `dotnet tool restore` → `dotnet ef migrations add <nome> --project src/HackatonFiap.Users.Infrastructure --startup-project src/HackatonFiap.Users.API` (o startup já aplica as migrations).
