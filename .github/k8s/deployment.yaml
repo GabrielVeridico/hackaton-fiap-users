@@ -35,7 +35,7 @@ spec:
               secretProviderClass: "hackatonfiap-users-secrets"
       containers:
         - name: hackatonfiap-users
-          image: fcgregistry.azurecr.io/hackatonfiap-users:latest
+          image: acrconexaosolidaria7xafxr.azurecr.io/hackatonfiap-users:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
