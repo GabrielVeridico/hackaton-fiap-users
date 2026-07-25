@@ -62,10 +62,12 @@ dotnet test --nologo   # 57 testes (domínio, handlers, validators)
 ```
 
 ## CI/CD
-`.github/workflows/ci-cd.yml` (GitHub Actions): a cada push/PR na `main` → **build + test + build da imagem Docker** (sempre, sem depender de secrets). O job de **deploy é opcional/gated** por `vars.DEPLOY_TO_AKS == 'true'` — a CI passa verde sem credenciais Azure.
+`.github/workflows/ci-cd.yml` (GitHub Actions): a cada push/PR na `main` → **build + test + build da imagem Docker** (sempre, sem depender de secrets). O job de **deploy é opcional/gated** por `vars.DEPLOY_TO_AKS == 'true'` — a CI passa verde sem credenciais Azure. Também aceita disparo manual (`workflow_dispatch`).
 
 ## Deploy
-Gated no CI (push na `main` + `DEPLOY_TO_AKS=true`): `docker build`/push para o **ACR** → `kubectl apply` dos manifests (`.github/k8s/`) + `kubectl set image` no namespace **`conexao-solidaria`** do AKS. Segredos via **Key Vault + CSI + Workload Identity**. Runbook completo em [orchestration/iac/DEPLOY-AZURE.md](https://github.com/GabrielVeridico/hackaton-fiap-orchestration/blob/master/iac/DEPLOY-AZURE.md).
+Gated no CI (push na `main` ou disparo manual + `DEPLOY_TO_AKS=true`): login federado **OIDC** na Azure (sem senha guardada no repo) → `docker build`/push para o **ACR** → scan **Trivy** → `kubectl set image` + `rollout status` no namespace **`conexao-solidaria`** do AKS.
+
+Os Deployments são criados pelo **Helm** (`orchestration/iac/deploy-apps.ps1`); o CD só promove a imagem nova. Os manifestos plain-YAML de referência ficam em [orchestration/k8s/](https://github.com/GabrielVeridico/hackaton-fiap-orchestration/tree/master/k8s). Segredos via **Key Vault + CSI + Workload Identity**. Runbook completo em [orchestration/iac/DEPLOY-AZURE.md](https://github.com/GabrielVeridico/hackaton-fiap-orchestration/blob/master/iac/DEPLOY-AZURE.md).
 
 ## Arquitetura & migrations
 ```

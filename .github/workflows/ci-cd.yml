@@ -4,9 +4,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
 
 jobs:
   ci:
@@ -38,28 +42,32 @@ jobs:
     name: Deploy to AKS (opcional)
     runs-on: ubuntu-latest
     needs: ci
-    # Deploy só quando habilitado explicitamente (variável DEPLOY_TO_AKS=true) e em push na main.
+    # Roda em push na main ou em disparo manual, e só com a variável DEPLOY_TO_AKS=true.
     # Assim a esteira obrigatória (build + testes + imagem) permanece verde mesmo sem infra Azure provisionada.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TO_AKS == 'true'
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && github.ref == 'refs/heads/main'
+      && vars.DEPLOY_TO_AKS == 'true'
     permissions:
-      security-events: write
-      actions: read
+      id-token: write        # obrigatório para o OIDC do azure/login
+      security-events: write # upload do SARIF do Trivy
       contents: read
     steps:
       - uses: actions/checkout@v4
 
-      - name: Azure Login
+      # Autenticação federada (OIDC): nenhuma senha de longa duração fica guardada no repositório.
+      - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Login to ACR via Docker
-        run: |
-          docker login ${{ secrets.ACR_NAME }}.azurecr.io \
-            --username ${{ secrets.ACR_USERNAME }} \
-            --password ${{ secrets.ACR_PASSWORD }}
+      # az acr login reaproveita o token do OIDC — dispensa ACR_USERNAME/ACR_PASSWORD.
+      - name: Login no ACR
+        run: az acr login --name ${{ secrets.ACR_NAME }}
 
-      - name: Build Docker image
+      - name: Build da imagem
         run: |
           IMAGE=${{ secrets.ACR_NAME }}.azurecr.io/hackatonfiap-users
           docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest -f src/HackatonFiap.Users.API/Dockerfile .
@@ -78,27 +86,22 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-      - name: Push Docker image
+      - name: Push da imagem
         run: |
           IMAGE=${{ secrets.ACR_NAME }}.azurecr.io/hackatonfiap-users
           docker push $IMAGE:${{ github.sha }}
           docker push $IMAGE:latest
 
-      - name: Set AKS context
-        uses: azure/aks-set-context@v3
-        with:
-          resource-group: ${{ secrets.RESOURCE_GROUP }}
-          cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
+      - name: Credenciais do AKS
+        run: az aks get-credentials -g ${{ secrets.RESOURCE_GROUP }} -n ${{ secrets.AKS_CLUSTER_NAME }} --overwrite-existing
 
-      - name: Apply K8s manifests
-        run: |
-          kubectl apply -f .github/k8s/deployment.yaml
-          kubectl apply -f .github/k8s/service.yaml
-          kubectl apply -f .github/k8s/ingress.yaml
-
-      - name: Rolling Deploy
+      # O Deployment é criado pelo Helm (hackaton-fiap-orchestration/iac/deploy-apps.ps1); aqui só
+      # rolamos a nova imagem. NÃO usar `kubectl apply` de manifesto cru: o selector do Deployment
+      # gerenciado pelo Helm (app.kubernetes.io/name) é imutável e o apply falha.
+      # Os manifestos plain-YAML de referência (RT3) ficam em hackaton-fiap-orchestration/k8s/.
+      - name: Rolling deploy
         run: |
           kubectl set image deployment/hackatonfiap-users \
             hackatonfiap-users=${{ secrets.ACR_NAME }}.azurecr.io/hackatonfiap-users:${{ github.sha }} \
             -n conexao-solidaria
-          kubectl rollout status deployment/hackatonfiap-users -n conexao-solidaria --timeout=120s
+          kubectl rollout status deployment/hackatonfiap-users -n conexao-solidaria --timeout=180s
