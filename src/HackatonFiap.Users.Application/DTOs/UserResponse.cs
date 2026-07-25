@@ -1,7 +1,7 @@
 using HackatonFiap.Users.Domain.Entities;
 
 namespace HackatonFiap.Users.Application.DTOs;
-// UserResponse é um DTO.
+// This record is used to return user information in the response of the API.
 public record UserResponse(
     Guid Id,
     string PersonType,
