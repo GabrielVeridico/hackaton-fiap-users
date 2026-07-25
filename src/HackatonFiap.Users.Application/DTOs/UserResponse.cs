@@ -1,7 +1,7 @@
 using HackatonFiap.Users.Domain.Entities;
 
 namespace HackatonFiap.Users.Application.DTOs;
-
+// UserResponse é um DTO.
 public record UserResponse(
     Guid Id,
     string PersonType,
