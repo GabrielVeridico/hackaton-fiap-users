@@ -1,7 +1,7 @@
 using HackatonFiap.Users.Domain.Entities;
 
 namespace HackatonFiap.Users.Application.DTOs;
-// UserResponse is a record that represents the response for a user. It contains the following properties:
+// UserResponse é um DTO.
 public record UserResponse(
     Guid Id,
     string PersonType,
