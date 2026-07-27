@@ -1,248 +1,156 @@
-﻿# Arquitetura do Sistema — Conexão Solidária (HackatonFiap)
+# Arquitetura — HackatonFiap.Users (UserAPI)
 
-Documentação de arquitetura e fluxo de comunicação entre os microsserviços do projeto **Conexão Solidária**, desenvolvido para o Hackathon — PosTech FIAP.
+Detalhamento das camadas, decisões e pontos de integração da UserAPI, o microsserviço de identidade e acesso da plataforma **Conexão Solidária**. A visão geral do serviço está no [README](../README.md); a topologia completa da plataforma está no repositório [orchestration](https://github.com/GabrielVeridico/hackaton-fiap-orchestration#ecossistema).
 
-## Visão Geral da Arquitetura
+## Onde a UserAPI se encaixa
 
-O sistema é composto por **3 microsserviços independentes**, cada um com seu próprio banco de dados e repositório, comunicando-se de forma assíncrona via **Azure Service Bus (Queues)**.
+A plataforma tem quatro serviços de backend, cada um com o próprio banco. A comunicação entre eles é **assíncrona**, por tópicos do Azure Service Bus. A UserAPI é a exceção: ela não participa da mensageria — sua integração com os demais é o **token JWT**, validado localmente por cada serviço.
 
 ```mermaid
 graph TB
-    subgraph "Clientes"
-        WEB([Web / Mobile / Postman])
+    subgraph Cliente
+        WEB([Front Next.js / BFF])
     end
 
-    subgraph "Microsserviço de Usuários"
-        UAPI[HackatonFiap.Users API<br/>:5081]
+    subgraph "Identidade"
+        UAPI[HackatonFiap.Users]
         UDB[(SQL Server<br/>HackatonFiapUsersDb)]
     end
 
-    subgraph "Microsserviço de Jogos"
-        GAPI[FCG.Games API<br/>:5105]
-        GDB[(SQL Server<br/>FCGGamesDb)]
-        GCON[ServiceBusConsumerService<br/>BackgroundService]
+    subgraph "Domínio de doação"
+        DAPI[HackatonFiap.Donations]
+        PAPI[HackatonFiap.Payments]
+        NFUNC[HackatonFiap.Notifications<br/>Azure Function]
     end
 
-    subgraph "Microsserviço de Pagamentos"
-        PFUNC[FCG.Payments<br/>Azure Functions<br/>:5098]
-        PDB[(SQL Server<br/>FCGPaymentsDb)]
-    end
+    SB[/Azure Service Bus<br/>tópicos donation-requested e payment-result\]
 
-    subgraph "Infraestrutura"
-        SB[/Azure Service Bus<br/>Queues - Plano Basic\]
-        JWT{{JWT Token<br/>Chave Compartilhada}}
-    end
-
-    WEB -->|REST + JWT| UAPI
-    WEB -->|REST + JWT| GAPI
-
+    WEB -->|REST| UAPI
+    WEB -->|REST + Bearer| DAPI
     UAPI --> UDB
-    GAPI --> GDB
-    PFUNC --> PDB
 
-    UAPI -.->|Gera Token JWT| JWT
-    GAPI -.->|Valida Token JWT| JWT
+    UAPI -.->|emite o JWT| WEB
+    DAPI -.->|valida o JWT<br/>mesma chave, issuer e audience| DAPI
+    PAPI -.->|valida o JWT| PAPI
 
-    GAPI -->|OrderPlacedEvent| SB
-    SB -->|queue: order-placed| PFUNC
-    PFUNC -->|PaymentProcessedEvent| SB
-    SB -->|queue: payments-processed| GCON
-    GCON --> GAPI
+    DAPI <--> SB
+    PAPI <--> SB
+    SB --> NFUNC
 ```
 
-## Diagrama de Comunicação entre Microsserviços
+Consequências dessa escolha:
+
+- Nenhum serviço chama a UserAPI em runtime para autorizar uma requisição. Uma indisponibilidade aqui impede novos logins, mas não derruba a saga de doação nem a página de transparência.
+- Os eventos de integração carregam os dados do doador (`DonorId`, `DonorEmail`, `DonorName`) capturados no momento da intenção de doação. A NotificationFunction notifica sem consultar este serviço.
+
+## Camadas
+
+A UserAPI segue Clean Architecture com quatro projetos. A dependência aponta sempre para dentro.
 
 ```mermaid
-flowchart LR
-    subgraph Users["HackatonFiap.Users :5081"]
-        R[Register]
-        L[Login]
-        P[Profile]
-    end
-
-    subgraph Games["FCG.Games :5105"]
-        CAT[Catálogo de Jogos]
-        PUR[Compra de Jogo]
-        LIB[Biblioteca]
-        REC[Recomendações]
-        CON[Consumer Service]
-    end
-
-    subgraph Payments["FCG.Payments :5098"]
-        PPF[ProcessPaymentFunction]
-    end
-
-    subgraph ServiceBus["Azure Service Bus - Queues"]
-        Q1[order-placed]
-        Q2[payments-processed]
-    end
-
-    L -->|JWT Token| PUR
-    PUR -->|OrderPlacedEvent| Q1
-    Q1 -->|ServiceBusTrigger| PPF
-    PPF -->|PaymentProcessedEvent| Q2
-    Q2 -->|BackgroundService| CON
-    CON -->|Approved: adiciona à biblioteca| LIB
+graph LR
+    API[API] --> APP[Application]
+    API --> INFRA[Infrastructure]
+    INFRA --> APP
+    APP --> DOM[Domain]
 ```
 
-## Fluxo Completo de Compra (E2E)
+| Projeto | Responsabilidade | Depende de |
+|---------|------------------|------------|
+| `HackatonFiap.Users.Domain` | Entidades `User` e `RefreshToken`, value objects `Document` e `Password`, enums `UserRole` e `PersonType`, `Result`/`Result<T>`/`Error`. Sem dependência externa. | — |
+| `HackatonFiap.Users.Application` | Comandos, queries, handlers, DTOs e as interfaces de saída (`IUserRepository`, `IRefreshTokenRepository`, `IPasswordHasher`, `IJwtTokenGenerator`, `IAuditService`). | Domain |
+| `HackatonFiap.Users.Infrastructure` | EF Core (`ApplicationDbContext`, configurations, repositórios, migrations), BCrypt, geração de JWT e de refresh token, auditoria. | Application |
+| `HackatonFiap.Users.API` | Controllers, middlewares, health checks, OpenTelemetry, composição da DI em `Program.cs`. | Application + Infrastructure |
+
+### Domain
+
+`User` tem setters privados e é construída por métodos de fábrica (`RegisterDonor`, `CreateByAdmin`, `CreateOwner`). As transições de estado — `ChangeRole`, `Deactivate`, `Reactivate`, `UpdateProfile`, `ChangePassword` — são métodos da própria entidade, não atribuições feitas de fora.
+
+`Document` valida CPF (`PersonType.Individual`) e CNPJ (`PersonType.Company`) na criação. Um documento inválido produz um `Result` de falha, não uma exceção. `Password` guarda apenas o hash e expõe `IsValid`, que exige no mínimo 8 caracteres com letra, número e símbolo.
+
+**Nenhum handler lança exceção para sinalizar erro de negócio.** Todos retornam `Result<T>` com um `Error` que carrega código e descrição; o controller traduz o código em status HTTP.
+
+### Application
+
+Um par comando/handler por caso de uso, em pastas com o nome do caso de uso:
+
+| Grupo | Casos de uso |
+|-------|--------------|
+| Autenticação | `AuthenticateUser`, `RegisterDonor`, `RefreshTokenFlow`, `Logout` |
+| Gestão | `CreateUser`, `UpdateUser`, `ChangeUserRole`, `DeactivateUser`, `ReactivateUser` |
+| Autoatendimento | `UpdateMyProfile`, `ResetMyPassword` |
+| Queries | `GetProfile`, `GetUserById`, `ListUsers` |
+
+Não há MediatR. Os handlers são registrados como `Scoped` e injetados direto no controller. Para o tamanho deste serviço, o pipeline explícito é mais fácil de ler e de testar do que a indireção de um mediator.
+
+### Infrastructure
+
+- **Persistência** — `ApplicationDbContext` carrega as configurations por assembly. As migrations são aplicadas no startup (`db.Database.Migrate()`).
+- **Senha** — `BcryptPasswordHasher`. O hash nunca sai da camada de infraestrutura.
+- **Token de acesso** — `JwtTokenGenerator`, HMAC-SHA256, validade de 4 horas, claims `sub`, `email`, papel e `isOwner`. Recusa qualquer chave com menos de 32 bytes; não existe chave de fallback no código.
+- **Refresh token** — `RefreshTokenService` gera 32 bytes aleatórios e persiste apenas o **SHA-256** do valor. O token em claro só existe na resposta HTTP.
+- **Auditoria** — `AuditService` grava na tabela `AuditEvents` o antes e o depois em JSON, junto com `CorrelationId`, `TraceId` e o autor da ação.
+
+### API
+
+- `CorrelationMiddleware` — lê `x-correlation-id` do request ou gera um novo, e devolve o mesmo valor no response. O identificador acompanha os logs e os registros de auditoria.
+- `RequestResponseLoggingMiddleware` — loga corpo de requisição e resposta com máscara sobre `password`, `senha`, `token`, `secret`, `accessToken` e `refreshToken`.
+- Health checks — `/health` (liveness, sem dependência) e `/ready` (readiness, com `AddDbContextCheck`).
+- Documentação interativa em `/scalar/v1`, sobre o documento OpenAPI em `/swagger/v1/swagger.json`.
+
+## Segurança
+
+### Emissão e validação do token
 
 ```mermaid
 sequenceDiagram
-    actor U as 🎮 Usuário
-    participant UA as 👤 HackatonFiap.Users API
-    participant GA as 🕹️ FCG.Games API
-    participant Q1 as 📨 Queue: order-placed
-    participant PF as ⚡ ProcessPaymentFunction
-    participant Q2 as 📨 Queue: payments-processed
-    participant CS as 🔄 ConsumerService
+    actor U as Usuário
+    participant UA as UserAPI
+    participant DA as DonationAPI
 
-    rect rgb(59, 130, 246, 0.1)
-        Note over U,CS: 🔐 1. Autenticação
-        U->>+UA: POST /api/auth/login {email, password}
-        UA-->>-U: ✅ {token, expiresAt}
-    end
-
-    rect rgb(16, 185, 129, 0.1)
-        Note over U,CS: 🔍 2. Navegação
-        U->>+GA: GET /api/games
-        GA-->>-U: 📋 Lista de jogos [{id, title, price}]
-    end
-
-    rect rgb(245, 158, 11, 0.1)
-        Note over U,CS: 🛒 3. Compra
-        U->>+GA: POST /api/games/{id}/purchase [Bearer token]
-        GA->>GA: Cria OrderGame (PendingPayment)
-        GA-)Q1: OrderPlacedEvent {orderId, userId, gameId, price}
-        GA-->>-U: 202 Accepted {orderId}
-    end
-
-    rect rgb(139, 92, 246, 0.1)
-        Note over U,CS: 💳 4. Processamento Assíncrono
-        Q1-)PF: ServiceBusTrigger dispara
-        PF->>PF: Processa pagamento (centavos pares = Approved)
-        PF-)Q2: PaymentProcessedEvent {orderId, status}
-    end
-
-    rect rgb(236, 72, 153, 0.1)
-        Note over U,CS: 📦 5. Conclusão
-        Q2-)CS: Consumer recebe evento
-        alt ✅ Approved
-            CS->>GA: Completa pedido + Adiciona à biblioteca
-        else ❌ Rejected
-            CS->>GA: Marca pedido como PaymentFailed
-        end
-    end
-
-    rect rgb(20, 184, 166, 0.1)
-        Note over U,CS: 📚 6. Verificação
-        U->>+GA: GET /api/games/library [Bearer token]
-        GA-->>-U: 🎮 Jogos na biblioteca do usuário
-    end
+    U->>UA: POST /api/auth/login
+    UA-->>U: accessToken (4 h) + refreshToken (7 d)
+    U->>DA: POST /api/donations (Bearer accessToken)
+    DA->>DA: valida assinatura, issuer, audience e validade
+    DA-->>U: 202 Accepted
 ```
 
-## Padrões Arquiteturais
+Emissor e público são compartilhados por todo o ecossistema (`conexaosolidaria.local` e `conexaosolidaria.clients`, por padrão). A chave de assinatura é a mesma nas três APIs — UserAPI, DonationAPI e PaymentAPI — e vem do Azure Key Vault em produção. A NotificationFunction não expõe HTTP nem valida token: ela só consome mensagens do Service Bus.
 
-### Clean Architecture
+### Rotação e detecção de reuso do refresh token
 
-Cada microsserviço segue Clean Architecture com 4 camadas:
+Cada `POST /api/auth/refresh` revoga o token apresentado e emite um par novo, registrando no token antigo qual o substituiu. Se um token **já revogado** for apresentado de novo — sinal de que alguém interceptou a cadeia — o serviço revoga **todos** os refresh tokens do usuário e devolve 401.
 
-```mermaid
-graph LR
-    subgraph "Camadas (dependência de fora para dentro)"
-        API[API / Functions] --> APP[Application]
-        APP --> DOM[Domain]
-        INFRA[Infrastructure] --> APP
-        API --> INFRA
-    end
-```
+### Modelo de papéis
 
-| Camada | Responsabilidade |
-|--------|-----------------|
-| **Domain** | Entidades, Value Objects, Eventos, Interfaces de repositório. Zero dependências externas. |
-| **Application** | Commands, Queries, Handlers (CQRS), DTOs, Validadores. Depende apenas de Domain. |
-| **Infrastructure** | EF Core, Service Bus, Repositórios, JWT, Audit. Implementa interfaces de Domain/Application. |
-| **API / Functions** | Controllers, Middlewares, DI, Startup. Ponto de entrada HTTP ou trigger. |
+| Papel | Pode |
+|-------|------|
+| `Doador` | Autocadastrar-se, gerenciar o próprio perfil e a própria senha, doar |
+| `GestorONG` | Tudo do doador, mais criar, editar, listar, desativar e reativar usuários |
+| `GestorONG` com `isOwner` | Tudo do gestor, mais trocar o papel de outros usuários |
 
-### CQRS (Command Query Responsibility Segregation)
+O Owner é semeado no startup quando a base não tem nenhum. Ele não pode ter o papel trocado nem ser desativado — as tentativas retornam 403 com o código `User.OwnerImmutable`.
 
-```mermaid
-graph LR
-    C[Controller] --> CMD[Command Handler]
-    C --> QRY[Query Handler]
-    CMD --> REPO[Repository Write]
-    CMD --> EVT[Event Publisher]
-    QRY --> REPOR[Repository Read]
-    REPO --> DB[(Database)]
-    REPOR --> DB
-    EVT --> SB[/Service Bus\]
-```
+O `[Authorize(Roles = "GestorONG")]` faz o primeiro corte no pipeline do ASP.NET Core; a exigência de `isOwner` é verificada dentro do handler, porque é uma regra de negócio e não um requisito de transporte.
 
-- **Commands**: CreateGame, UpdateGame, DeleteGame, PlaceOrder
-- **Queries**: ListGames, GetGameById, GetRecommendations, GetUserLibrary
-- **Events**: OrderPlacedEvent, PaymentProcessedEvent
+## Observabilidade
 
-### Comunicação entre Microsserviços
+| Sinal | Implementação |
+|-------|---------------|
+| Logs | Serilog estruturado, enriquecido com `ServiceName`, `MachineName` e `ThreadId`. Sink de console sempre; Application Insights quando a connection string está configurada. |
+| Traces | OpenTelemetry com instrumentação de ASP.NET Core, HttpClient e EF Core. |
+| Métricas | OpenTelemetry exportado em `/metrics` no formato Prometheus. Contadores próprios: `users_logins_total` e `users_registrations_total`, além das métricas de runtime e de requisição. |
+| Correlação | `x-correlation-id` propagado no request, no response, nos logs e nos registros de auditoria. |
+| Trilha de auditoria | Tabela `AuditEvents` com o antes e o depois de cada alteração de usuário. |
 
-| De | Para | Mecanismo | Queue |
-|----|------|-----------|-------|
-| FCG.Games | FCG.Payments | Azure Service Bus (async) | `order-placed` |
-| FCG.Payments | FCG.Games | Azure Service Bus (async) | `payments-processed` |
-| Cliente | HackatonFiap.Users | REST (sync) | — |
-| Cliente | FCG.Games | REST (sync) | — |
+## Testes
 
-### Segurança
+Os 57 casos de teste (xUnit + NSubstitute + FluentAssertions) cobrem três frentes:
 
-```mermaid
-graph LR
-    U[Usuário] -->|1. Login| UA[HackatonFiap.Users API]
-    UA -->|2. JWT Token| U
-    U -->|3. Bearer Token| GA[FCG.Games API]
-    GA -->|4. Valida JWT<br/>mesma chave secreta| GA
-```
+| Frente | O que verifica |
+|--------|----------------|
+| Domínio | Validação de CPF e CNPJ, invariantes de `User`, regras de `Password`, ciclo de vida do `RefreshToken` |
+| Handlers de comando | Autenticação, autocadastro, rotação e reuso de refresh token, logout, e as regras de gestão de usuários (incluindo a imutabilidade do Owner) |
+| Queries | Leitura de perfil |
 
-- **JWT Bearer Token** compartilhado entre Users e Games (mesma chave, issuer e audience)
-- **Roles**: `User` (comprar jogos) e `Admin` (CRUD de jogos)
-- **Claim `sub`**: identificador único do usuário propagado nos eventos
-
-### Observabilidade
-
-| Componente | Implementação |
-|------------|---------------|
-| **Logs estruturados** | Serilog com Console + Application Insights sinks |
-| **Correlation ID** | Middleware propaga `x-correlation-id` entre requests e eventos |
-| **Audit Trail** | Games: override de `SaveChangesAsync` no EF Core. Users: `AuditService` com before/after JSON |
-| **Tracing** | Serilog enrichers (MachineName, ThreadId, ServiceName) |
-
-### Infraestrutura (Docker Compose)
-
-```mermaid
-graph TB
-    subgraph "Docker Compose"
-        SQL[SQL Server 2022<br/>:1433]
-        SBSQL[Azure SQL Edge<br/>ServiceBus internal]
-        SBE[Service Bus Emulator<br/>:5672]
-        UAPI[hackatonfiap-users<br/>:5081]
-        GAPI[fcg-games-api<br/>:5105]
-        PFUNC[fcg-payments-func<br/>:5098]
-    end
-
-    SBSQL --> SBE
-    SQL --> UAPI & GAPI & PFUNC
-    SBE --> GAPI & PFUNC
-
-    style SQL fill:#326CE5,color:#fff
-    style SBE fill:#FF6B35,color:#fff
-    style UAPI fill:#68BC71,color:#fff
-    style GAPI fill:#68BC71,color:#fff
-    style PFUNC fill:#9B59B6,color:#fff
-```
-
-| Container | Imagem | Porta |
-|-----------|--------|-------|
-| `fcg-sqlserver` | `mcr.microsoft.com/mssql/server:2022-latest` | 1433 |
-| `fcg-servicebus-sql` | `mcr.microsoft.com/azure-sql-edge:latest` | — |
-| `fcg-servicebus` | `mcr.microsoft.com/azure-messaging/servicebus-emulator:latest` | 5672 |
-| `fcg-users-api` | Build local (Alpine .NET 8) | 5081 |
-| `fcg-games-api` | Build local (Alpine .NET 8) | 5105 |
-| `fcg-payments-func` | Build local (Azure Functions .NET 8) | 5098 |
+Todos os handlers são exercitados contra interfaces mockadas. Não há banco em memória: o objetivo é testar a regra, não o EF Core.
